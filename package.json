@@ -2,7 +2,8 @@
   "name": "starknet_htlc",
   "private": "true",
   "scripts": {
-    "deploy": "ts-node scripts/deploy.ts",
+    "deploy:htlc": "ts-node scripts/htlc.ts",
+    "deploy:multicall": "ts-node scripts/multicall.ts",
     "start:hardhat": "npx hardhat node",
     "start:devnet": "starknet-devnet --seed 1",
     "test": "jest"

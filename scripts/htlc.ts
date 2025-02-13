@@ -1,7 +1,6 @@
 import { Account, CallData, Contract, RpcProvider, stark } from "starknet";
-import { promises as fs } from "fs";
-import path from "path";
 import * as dotenv from "dotenv";
+import { getCompiledCode, writeDeploymentInfo } from "./utils";
 dotenv.config();
 
 type NetworkType = "sepolia" | "mainnet" | "devnet";
@@ -65,8 +64,9 @@ async function main() {
       provider
     );
 
-    console.log("✅ Contract deployed successfully!");
+    console.log("✅ HTLC Contract deployed successfully!");
     console.log("Contract address:", htlcContract.address);
+    console.log("Token Deployed :", tokenAddress);
     console.log("Transaction hash:", deployResponse.deploy.transaction_hash);
 
     // Save deployment info
@@ -78,48 +78,11 @@ async function main() {
       timestamp: new Date().toISOString(),
     };
 
-    // Create deployments directory if it doesn't exist
-    await fs.mkdir('./deployments', { recursive: true });
-    
-    const deploymentPath = `./deployments/${network}_${htlcContract.address}.json`;
-    try {
-      await fs.access(deploymentPath);
-      console.log('Deployment file already exists');
-    } catch (error) {
-      // File doesn't exist, create it
-      await fs.writeFile(
-        deploymentPath,
-        JSON.stringify(deployInfo, null, 2)
-      );
-      console.log('Created deployment file:', deploymentPath);
-    }
+    await writeDeploymentInfo("htlc",network, deployInfo);
   } catch (error: any) {
     console.error("Deployment failed:", error.message);
     process.exit(1);
   }
-}
-
-export async function getCompiledCode(filename: string) {
-  const sierraFilePath = path.join(
-    __dirname,
-    `../target/dev/${filename}.contract_class.json`
-  );
-  const casmFilePath = path.join(
-    __dirname,
-    `../target/dev/${filename}.compiled_contract_class.json`
-  );
-
-  const code = [sierraFilePath, casmFilePath].map(async (filePath) => {
-    const file = await fs.readFile(filePath);
-    return JSON.parse(file.toString("ascii"));
-  });
-
-  const [sierraCode, casmCode] = await Promise.all(code);
-
-  return {
-    sierraCode,
-    casmCode,
-  };
 }
 
 main()
