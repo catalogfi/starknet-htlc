@@ -35,7 +35,7 @@ Use Scarb to compile the Cairo smart contract:
 scarb build
 ```
 ### **3. Start Development Networks**  
-Launch a local Starknet development environment:
+Run merry to start a Multichain local environment for testing:
 
 ```bash
 merry go
