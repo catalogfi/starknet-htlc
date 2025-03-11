@@ -1,7 +1,7 @@
 # Visit https://foundry-rs.github.io/starknet-foundry/appendix/snfoundry-toml.html for more information
 
 # [sncast.myprofile1]                                    # Define a profile name
-# url = "http://127.0.0.1:5050/"                         # Url of the RPC provider
+# url = "http://10.67.23.176:5050/"                         # Url of the RPC provider
 # accounts_file = "../account-file"                      # Path to the file with the account data
 # account = "mainuser"                                   # Account from `accounts_file` or default account file that will be used for the transactions
 # keystore = "~/keystore"                                # Path to the keystore file
