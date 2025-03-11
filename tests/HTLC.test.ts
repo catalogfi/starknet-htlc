@@ -26,7 +26,7 @@ import {
 import { regTestUtils } from "./bitcoin/regtest";
 import axios from "axios";
 
-const nodeUrl = "http://10.67.23.176:8547/rpc";
+const nodeUrl = "http://127.0.0.1:8547/rpc";
 
 describe("Starknet HTLC", () => {
   const starknetProvider = new RpcProvider({
@@ -868,7 +868,7 @@ describe("Starknet HTLC", () => {
     beforeAll(async () => {
       BTCProvider = new BitcoinProvider(
         BitcoinNetwork.Regtest,
-        "http://10.67.23.176:30000" // merry bitcoin node  
+        "http://127.0.0.1:30000" // merry bitcoin node  
       );
       aliceBitcoinWallet = BitcoinWallet.createRandom(BTCProvider);
       bobBitcoinWallet = BitcoinWallet.createRandom(BTCProvider);

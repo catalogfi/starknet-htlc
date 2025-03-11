@@ -16,7 +16,7 @@ import { ethers, parseEther } from "ethers";
 import { randomBytes } from "crypto";
 import axios from "axios";
 
-const nodeUrl = "http://10.67.23.176:8547/rpc";
+const nodeUrl = "http://127.0.0.1:8547/rpc";
 
 describe("Starknet Multicall", () => {
   const starknetProvider = new RpcProvider({
@@ -41,6 +41,14 @@ describe("Starknet Multicall", () => {
       publicKey:
         "0x055c96342ff1304a2807755209735a35a7220ec18153cb516e376d47e6471083",
     },
+    {
+      address:
+        "0x018f81c2ef42310e0abd4fafd27f37beb34d000641beb2cd8a6fb97596552ddb",
+      privateKey:
+        "0x0000000000000000000000000000000016b0be70a6344cccf3ed6e7d9cf04de4",
+      publicKey:
+        "0x0795974d45796c18ff5ae856dd20a3f1878061510f0fef5da10ade4393ecbf92",
+    },
   ];
 
   // Token address
@@ -59,6 +67,7 @@ describe("Starknet Multicall", () => {
 
   let alice: Account;
   let bob: Account;
+  let charlie : Account;
 
   let CHAIN_ID: string;
 
@@ -203,6 +212,14 @@ describe("Starknet Multicall", () => {
       "0x3"
     );
 
+    charlie = new Account(
+      starknetProvider,
+      accounts[2].address,
+      accounts[2].privateKey,
+      "1",
+      "0x3"
+    )
+
     const contractData = await starknetProvider.getClassAt(STARK);
     stark = new Contract(contractData.abi, STARK, starknetProvider);
     await deployContracts();
@@ -272,7 +289,7 @@ describe("Starknet Multicall", () => {
         }),
       });
 
-      await bob.execute({
+      await charlie.execute({
         contractAddress: multicall.address,
         entrypoint: "multicall",
         calldata: redeem_callData,
@@ -305,7 +322,7 @@ describe("Starknet Multicall", () => {
         }),
       });
 
-      await alice.execute({
+      await charlie.execute({
         contractAddress: multicall.address,
         entrypoint: "multicall",
         calldata: refund_callData,
