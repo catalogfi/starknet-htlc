@@ -809,7 +809,8 @@ describe("Starknet HTLC", () => {
 
       // Bob intiates in Starknet
       const { low, high } = cairo.uint256(parseEther("10"));
-      await charlie.execute({
+
+      await bob.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "initiate",
         calldata: [
@@ -828,7 +829,7 @@ describe("Starknet HTLC", () => {
         bob.address
       );
       const aliceBlanceBeforeRedeem = await stark.balanceOf(alice.address);
-      await alice.execute({
+      await charlie.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "redeem",
         calldata: {
@@ -918,7 +919,7 @@ describe("Starknet HTLC", () => {
         bob.address
       );
       const aliceBlanceBeforeRedeem = await stark.balanceOf(alice.address);
-      await alice.execute({
+      await charlie.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "redeem",
         calldata: {
