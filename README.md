@@ -96,6 +96,6 @@ yarn deploy:multicall mainnet "https://your-mainnet-rpc"
 yarn deploy:multicall devnet "http://127.0.0.1:5050"
 
 # Example
-yarn deploy:multicall sepolia "https://starknet-sepolia.public.blastapi.io"
+yarn deploy:multicall sepolia "https://starknet-sepolia.public.blastapi.io/rpc/0_8"
 ```
 After successful deployment, a JSON file named .<contract>_<network>_<contract_address>.json will be created in the project root directory containing all deployment details including contract address, transaction hash, and network information.
