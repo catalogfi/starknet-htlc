@@ -67,19 +67,35 @@ yarn install
 scarb build
 ```
 ### **3.Deploy Contract**  
-Launch a local Starknet development environment:
+
+#### HTLC Contract
 
 ```bash
 # Sepolia Testnet
-yarn deploy sepolia "https://starknet-sepolia.public.blastapi.io" <token_address>
+yarn deploy:htlc sepolia "https://starknet-sepolia.public.blastapi.io" <token_address>
 
 # Mainnet
-yarn deploy mainnet "https://your-mainnet-rpc" <token_address>
+yarn deploy:htlc mainnet "https://your-mainnet-rpc" <token_address>
 
 # Local Devnet
-yarn deploy devnet "http://127.0.0.1:5050" <token_address>
+yarn deploy:htlc devnet "http://127.0.0.1:5050" <token_address>
 
 # Example
-yarn deploy sepolia "https://starknet-sepolia.public.blastapi.io" 0x4718F5A0FC34CC1AF16A1CDEE98FFB20C31F5CD61D6AB07201858F4287C938D
+yarn deploy:htlc sepolia "https://starknet-sepolia.public.blastapi.io" 0x4718F5A0FC34CC1AF16A1CDEE98FFB20C31F5CD61D6AB07201858F4287C938D
 ```
-After successful deployment, a JSON file named .<network>_<contract_address>.json will be created in the project root directory containing all deployment details including contract address, transaction hash, and network information.
+#### Multicall Contract
+
+```bash
+# Sepolia Testnet
+yarn deploy:multicall sepolia "https://starknet-sepolia.public.blastapi.io"
+
+# Mainnet
+yarn deploy:multicall mainnet "https://your-mainnet-rpc"
+
+# Local Devnet
+yarn deploy:multicall devnet "http://127.0.0.1:5050"
+
+# Example
+yarn deploy:multicall sepolia "https://starknet-sepolia.public.blastapi.io/rpc/0_8"
+```
+After successful deployment, a JSON file named .<contract>_<network>_<contract_address>.json will be created in the project root directory containing all deployment details including contract address, transaction hash, and network information.
