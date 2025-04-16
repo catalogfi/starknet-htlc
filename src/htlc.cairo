@@ -32,7 +32,7 @@ pub mod HTLC {
     use core::starknet::event::EventEmitter;
 
 
-    pub const CHAIN_ID: felt252 = 0x534e5f5345504f4c4941; // SN_SEPOLIA
+    pub const CHAIN_ID: felt252 = 0x534e5f4d41494e; // SN_MAIN
     pub const NAME: felt252 = 'HTLC';
     pub const VERSION: felt252 = '1';
 
