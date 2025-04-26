@@ -170,10 +170,11 @@ pub mod HTLC {
             assert!(!order.is_fulfilled, "HTLC: order fulfilled");
 
             let secret_hash = compute_sha256_u32_array(secret.clone(), 0, 0);
-            let initiator_address: felt252 = order.initiator.try_into().unwrap();
+            let initiator_address: felt252 = order.initiator.try_into().expect('HTLC: invalid initiator address');
+            let redeemer_address: felt252 = order.redeemer.try_into().expect('HTLC: invalid redeemer address');
 
             assert!(
-                self.generate_order_id(CHAIN_ID, secret_hash, initiator_address) == order_id,
+                self.generate_order_id(CHAIN_ID,initiator_address,redeemer_address,order.timelock,order.amount,secret_hash) == order_id,
                 "HTLC: incorrect secret",
             );
 
@@ -293,8 +294,9 @@ pub mod HTLC {
         ) {
             assert!(initiator_ != redeemer_, "HTLC: same initiator & redeemer");
 
-            let initiator_address: felt252 = initiator_.try_into().unwrap();
-            let order_id = self.generate_order_id(CHAIN_ID, secret_hash_, initiator_address);
+            let initiator_address: felt252 = initiator_.try_into().expect('HTLC: invalid initiator address');
+            let redeemer_address: felt252 = redeemer_.try_into().expect('HTLC: invalid redeemer address');
+            let order_id = self.generate_order_id(CHAIN_ID, initiator_address,redeemer_address, timelock_, amount_, secret_hash_);
 
             let order: Order = self.orders.read(order_id);
             assert!(!order.redeemer.is_non_zero(), "HTLC: duplicate order");
@@ -341,13 +343,20 @@ pub mod HTLC {
         fn generate_order_id(
             self: @ContractState,
             chain_id: felt252,
-            secret_hash: [u32; 8],
             initiator_address: felt252,
+            redeemer_address: felt252,
+            timelock: u128,
+            amount: u256,
+            secret_hash: [u32; 8],
         ) -> felt252 {
             let mut state = PoseidonTrait::new();
             state = state.update(chain_id);
-            state = state.update_with(secret_hash);
             state = state.update(initiator_address);
+            state = state.update(redeemer_address);
+            state = state.update(timelock.into());
+            state = state.update(amount.low.into());
+            state = state.update(amount.high.into());
+            state = state.update_with(secret_hash);
             state.finalize()
         }
     }

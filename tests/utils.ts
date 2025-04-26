@@ -1,6 +1,9 @@
-import { hash } from "starknet";
+import { cairo, hash } from "starknet";
 import { promises as fs } from "fs";
 import path from "path";
+import { BigNumberish } from "ethers";
+import axios from "axios";
+import { STARKNET_DEVNET_URL } from "./HTLC.test";
 
 export async function getCompiledCode(filename: string) {
   const sierraFilePath = path.join(
@@ -90,10 +93,28 @@ export function u32ArrayToHex(
 
 export function generateOrderId(
   chainId: string,
-  secretHash: number[],
-  intiatorAddress: string
+  initiatorAddress: string,
+  redeemerAddress: string,
+  timelock: BigInt,
+  amount : BigInt,
+  secretHash: number[]
 ): bigint {
-  const inputs = [BigInt(chainId), ...secretHash, BigInt(intiatorAddress)];
+  const amountCairo = cairo.uint256(amount as BigNumberish);
+  const inputs = [BigInt(chainId),initiatorAddress,redeemerAddress,timelock as BigNumberish,amountCairo.low,amountCairo.high, ...secretHash];
   const orderId = hash.computePoseidonHashOnElements(inputs);
   return BigInt(orderId);
+}
+
+export const mineStarknetBlocks = async (blocks : number) => {
+  try {
+    for (let i = 0; i < blocks; i++) {
+      await axios.post(STARKNET_DEVNET_URL, {
+        "jsonrpc": "2.0",
+        "id": "1",
+        "method": "devnet_createBlock"
+      });
+    }
+  } catch (error) {
+    console.log("Mining failed : ", error);
+  }
 }
