@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { BigNumberish } from "ethers";
 import axios from "axios";
-import { STARKNET_DEVNET_URL } from "./HTLC.test";
+import { STARKNET_DEVNET_URL } from "./config";
 
 export async function getCompiledCode(filename: string) {
   const sierraFilePath = path.join(

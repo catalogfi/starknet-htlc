@@ -24,9 +24,7 @@ import {
   BitcoinWallet,
 } from "@catalogfi/wallets";
 import { regTestUtils } from "./bitcoin/regtest";
-
-export const STARKNET_DEVNET_URL = "http://127.0.0.1:8547/rpc";
-export const BITCOIN_NODE_URL = "http://127.0.0.1:18443"
+import { BITCOIN_NODE_URL, STARKNET_DEVNET_URL } from "./config";
 
 describe("Starknet HTLC", () => {
   const starknetProvider = new RpcProvider({
@@ -792,7 +790,7 @@ describe("Starknet HTLC", () => {
     beforeAll(async () => {
       BTCProvider = new BitcoinProvider(
         BitcoinNetwork.Regtest,
-        "http://127.0.0.1:30000" // merry bitcoin node  
+        BITCOIN_NODE_URL  
       );
       aliceBitcoinWallet = BitcoinWallet.createRandom(BTCProvider);
       bobBitcoinWallet = BitcoinWallet.createRandom(BTCProvider);
