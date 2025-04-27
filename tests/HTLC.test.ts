@@ -120,7 +120,6 @@ describe("Starknet HTLC", () => {
     callData = new CallData(sierraCode.abi);
 
     const constructor = callData.compile("constructor", {
-      chain_id: CHAIN_ID,
       token: STARK,
     });
 

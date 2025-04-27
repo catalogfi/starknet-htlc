@@ -11,11 +11,12 @@
 //!          Redeemer function: 1. redeem
 #[starknet::contract]
 pub mod HTLC {
-    use core::num::traits::Zero;
+    use starknet::SyscallResultTrait;
+use core::num::traits::Zero;
     use starknet::{ContractAddress, get_caller_address, get_block_info, get_contract_address};
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerWriteAccess,
-        StoragePointerReadAccess,
+        StoragePointerReadAccess
     };
     use core::poseidon::{PoseidonTrait};
     use core::option::OptionTrait;
@@ -30,6 +31,7 @@ pub mod HTLC {
     };
     use crate::interface::events::{Initiated, Redeemed, Refunded};
     use core::starknet::event::EventEmitter;
+    use starknet::syscalls::get_execution_info_v2_syscall;
 
 
     pub const NAME: felt252 = 'HTLC';
@@ -71,8 +73,9 @@ pub mod HTLC {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, chain_id: felt252, token: ContractAddress) {
-        self.chain_id.write(chain_id);
+    fn constructor(ref self: ContractState, token: ContractAddress) {
+        let tx_info = get_execution_info_v2_syscall().unwrap_syscall().unbox().tx_info.unbox();
+        self.chain_id.write(tx_info.chain_id);
         self.token.write(IERC20Dispatcher { contract_address: token });
     }
 
