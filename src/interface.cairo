@@ -2,10 +2,13 @@ pub mod sn_domain;
 pub mod struct_hash;
 pub mod events;
 use starknet::ContractAddress;
+use crate::htlc::HTLC::Order;
 
 #[starknet::interface]
 pub trait IHTLC<TContractState> {
     fn token(self: @TContractState) -> ContractAddress;
+
+    fn get_order(self: @TContractState, order_id: felt252) -> Order;
 
     fn initiate(
         ref self: TContractState,
@@ -42,7 +45,7 @@ pub trait IHTLC<TContractState> {
 }
 
 pub trait IMessageHash<T> {
-    fn get_message_hash(self: @T, signer: ContractAddress) -> felt252;
+    fn get_message_hash(self: @T, chain_id: felt252, signer: ContractAddress) -> felt252;
 }
 
 pub trait IStructHash<T> {
