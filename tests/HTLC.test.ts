@@ -333,14 +333,15 @@ describe("Starknet HTLC", () => {
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
-          entrypoint: "initiate",
+          entrypoint: "initiate_on_behalf",
           calldata: [
+            ZERO_ADDRESS,
             ZERO_ADDRESS,
             TIMELOCK,
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash1,
-          ], // Cairo expects parameters in this format
+          ],
         })
       ).rejects.toThrow("HTLC: zero address redeemer");
     });
@@ -350,8 +351,9 @@ describe("Starknet HTLC", () => {
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
-          entrypoint: "initiate",
+          entrypoint: "initiate_on_behalf",
           calldata: [
+            alice.address,
             bob.address,
             TIMELOCK,
             zeroU256.low,
@@ -366,8 +368,8 @@ describe("Starknet HTLC", () => {
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
-          entrypoint: "initiate",
-          calldata: [bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
+          entrypoint: "initiate_on_behalf",
+          calldata: [alice.address,bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
         })
       ).rejects.toThrow("HTLC: zero timelock");
     });
@@ -427,44 +429,109 @@ describe("Starknet HTLC", () => {
     };
 
     it("Should not able to initiate with no redeemer.", async () => {
+
+      const initiate: TypedData = {
+        domain: DOMAIN,
+        primaryType: "Initiate",
+        types: INTIATE_TYPE,
+        message: {
+          redeemer: bob.address,
+          amount: cairo.uint256(AMOUNT),
+          timelock: TIMELOCK,
+          secretHash: secretHash7,
+        },
+      };
+
+      const signature = (await alice.signMessage(
+        initiate
+      )) as WeierstrassSignatureType;
+      const { r, s } = signature;
+
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
-          entrypoint: "initiate",
+          entrypoint: "initiate_with_signature",
           calldata: [
+            charlie.address,
             ZERO_ADDRESS,
             TIMELOCK,
             AMOUNT_LOW,
             AMOUNT_HIGH,
-            ...secretHash1,
-          ], // Cairo expects parameters in this format
+            ...secretHash7,
+            [r, s],
+          ],
         })
       ).rejects.toThrow("HTLC: zero address redeemer");
     });
 
     it("Should not able to initiate a swap with no amount.", async () => {
+
+      const initiate: TypedData = {
+        domain: DOMAIN,
+        primaryType: "Initiate",
+        types: INTIATE_TYPE,
+        message: {
+          redeemer: bob.address,
+          amount: cairo.uint256(0),
+          timelock: TIMELOCK,
+          secretHash: secretHash7,
+        },
+      };
+
+      const signature = (await alice.signMessage(
+        initiate
+      )) as WeierstrassSignatureType;
+      const { r, s } = signature;
+
       const zeroU256 = { low: 0n, high: 0n };
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
-          entrypoint: "initiate",
+          entrypoint: "initiate_with_signature",
           calldata: [
+            alice.address,
             bob.address,
             TIMELOCK,
             zeroU256.low,
             zeroU256.high,
-            ...secretHash1,
+            ...secretHash7,
+            [r, s],
           ],
         })
       ).rejects.toThrow("HTLC: zero amount");
     });
 
     it("Should not able to initiate a swap with a 0 expiry.", async () => {
+      const initiate: TypedData = {
+        domain: DOMAIN,
+        primaryType: "Initiate",
+        types: INTIATE_TYPE,
+        message: {
+          redeemer: bob.address,
+          amount: cairo.uint256(AMOUNT),
+          timelock: 0,
+          secretHash: secretHash7,
+        },
+      };
+
+      const signature = (await alice.signMessage(
+        initiate
+      )) as WeierstrassSignatureType;
+      const { r, s } = signature;
+
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
-          entrypoint: "initiate",
-          calldata: [bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
+          entrypoint: "initiate_with_signature",
+          calldata: [
+            charlie.address,
+            bob.address,
+            0,
+            AMOUNT_LOW,
+            AMOUNT_HIGH,
+            ...secretHash7,
+            [r, s],
+          ],
         })
       ).rejects.toThrow("HTLC: zero timelock");
     });
