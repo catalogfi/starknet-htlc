@@ -10,7 +10,12 @@ import {
   TypedDataRevision,
   stark as sn,
 } from "starknet";
-import { generateOrderId, getCompiledCode, hexToU32Array, mineStarknetBlocks } from "./utils";
+import {
+  generateOrderId,
+  getCompiledCode,
+  hexToU32Array,
+  mineStarknetBlocks,
+} from "./utils";
 import { ethers, parseEther, sha256 } from "ethers";
 import { randomBytes } from "crypto";
 import { HTLC, HTLC_ARTIFACTS } from "./abi/htlc";
@@ -66,7 +71,7 @@ describe("Starknet HTLC", () => {
     "0x000000000000000000000000000000000000000000000000000000000000000";
   const TIMELOCK = 10n;
   const AMOUNT = parseEther("1");
-  const {low : AMOUNT_LOW, high : AMOUNT_HIGH} = cairo.uint256(AMOUNT);
+  const { low: AMOUNT_LOW, high: AMOUNT_HIGH } = cairo.uint256(AMOUNT);
 
   let stark: Contract;
   let starknetHTLC: Contract;
@@ -96,6 +101,15 @@ describe("Starknet HTLC", () => {
 
   let sierraCode, casmCode;
 
+  interface Order {
+    is_fulfilled: boolean;
+    initiator: bigint;
+    redeemer: bigint;
+    initiated_at: bigint;
+    timelock: bigint;
+    amount: bigint;
+  }
+
   const deployHTLC = async () => {
     try {
       ({ sierraCode, casmCode } = await getCompiledCode("starknet_htlc_HTLC"));
@@ -104,8 +118,9 @@ describe("Starknet HTLC", () => {
       process.exit(1);
     }
     callData = new CallData(sierraCode.abi);
-    
+
     const constructor = callData.compile("constructor", {
+      chain_id: CHAIN_ID,
       token: STARK,
     });
 
@@ -142,12 +157,11 @@ describe("Starknet HTLC", () => {
 
     CHAIN_ID = (await starknetProvider.getChainId()).toString();
 
-
     alice = new Account(
       starknetProvider,
       accounts[0].address,
       accounts[0].privateKey
-    )
+    );
 
     bob = new Account(
       starknetProvider,
@@ -179,7 +193,7 @@ describe("Starknet HTLC", () => {
     });
 
     it("Should be deployed with correct token address", async () => {
-      expect(await starknetHTLC.token()).toBe(BigInt(STARK)); // token() returns a felt252 
+      expect(await starknetHTLC.token()).toBe(BigInt(STARK)); // token() returns a felt252
     });
   });
 
@@ -189,7 +203,13 @@ describe("Starknet HTLC", () => {
         alice.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate",
-          calldata: [ZERO_ADDRESS, TIMELOCK, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1], // Cairo expects parameters in this format
+          calldata: [
+            ZERO_ADDRESS,
+            TIMELOCK,
+            AMOUNT_LOW,
+            AMOUNT_HIGH,
+            ...secretHash1,
+          ], // Cairo expects parameters in this format
         })
       ).rejects.toThrow("HTLC: zero address redeemer");
     });
@@ -226,7 +246,13 @@ describe("Starknet HTLC", () => {
         alice.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate",
-          calldata: [alice.address, TIMELOCK, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
+          calldata: [
+            alice.address,
+            TIMELOCK,
+            AMOUNT_LOW,
+            AMOUNT_HIGH,
+            ...secretHash1,
+          ],
         })
       ).rejects.toThrow("HTLC: same initiator & redeemer");
     });
@@ -243,21 +269,31 @@ describe("Starknet HTLC", () => {
     });
 
     it("Should not able to initiate swap with amount greater than balance.", async () => {
-      const { low, high } = cairo.uint256(parseEther("5000"));
+      const amount = parseEther("5000");
+      stark.connect(bob);
+      await stark.approve(starknetHTLC.address, amount);
+
+      const { low, high } = cairo.uint256(amount);
       await expect(
         bob.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate",
           calldata: [alice.address, TIMELOCK, low, high, ...secretHash1],
         })
-      ).rejects.toThrow("ERC20: Insufficient balance");
+      ).rejects.toThrow("ERC20: insufficient balance");
     });
 
     it("Should able to initiate a swap with correct parameters.", async () => {
       await alice.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "initiate",
-        calldata: [bob.address, TIMELOCK, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
+        calldata: [
+          bob.address,
+          TIMELOCK,
+          AMOUNT_LOW,
+          AMOUNT_HIGH,
+          ...secretHash1,
+        ],
       });
     });
 
@@ -266,7 +302,13 @@ describe("Starknet HTLC", () => {
         alice.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate",
-          calldata: [bob.address, TIMELOCK, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
+          calldata: [
+            bob.address,
+            TIMELOCK,
+            AMOUNT_LOW,
+            AMOUNT_HIGH,
+            ...secretHash1,
+          ],
         })
       ).rejects.toThrow("HTLC: duplicate order");
     });
@@ -275,17 +317,73 @@ describe("Starknet HTLC", () => {
       await alice.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "initiate",
-        calldata: [bob.address, TIMELOCK, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash2],
+        calldata: [
+          bob.address,
+          TIMELOCK,
+          AMOUNT_LOW,
+          AMOUNT_HIGH,
+          ...secretHash2,
+        ],
       });
     });
   });
 
   describe("-- HTLC Initiate on Behalf --", () => {
+    it("Should not able to initiate with no redeemer.", async () => {
+      await expect(
+        alice.execute({
+          contractAddress: starknetHTLC.address,
+          entrypoint: "initiate",
+          calldata: [
+            ZERO_ADDRESS,
+            TIMELOCK,
+            AMOUNT_LOW,
+            AMOUNT_HIGH,
+            ...secretHash1,
+          ], // Cairo expects parameters in this format
+        })
+      ).rejects.toThrow("HTLC: zero address redeemer");
+    });
+
+    it("Should not able to initiate a swap with no amount.", async () => {
+      const zeroU256 = { low: 0n, high: 0n };
+      await expect(
+        alice.execute({
+          contractAddress: starknetHTLC.address,
+          entrypoint: "initiate",
+          calldata: [
+            bob.address,
+            TIMELOCK,
+            zeroU256.low,
+            zeroU256.high,
+            ...secretHash1,
+          ],
+        })
+      ).rejects.toThrow("HTLC: zero amount");
+    });
+
+    it("Should not able to initiate a swap with a 0 expiry.", async () => {
+      await expect(
+        alice.execute({
+          contractAddress: starknetHTLC.address,
+          entrypoint: "initiate",
+          calldata: [bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
+        })
+      ).rejects.toThrow("HTLC: zero timelock");
+    });
+
     it("Should able to initiate a swap on belhalf with correct parameters.", async () => {
       await alice.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "initiate_on_behalf",
-        calldata: [alice.address, bob.address, 10n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash3],
+        calldata: [
+          alice.address,
+          bob.address,
+          10n,
+          AMOUNT_LOW,
+          AMOUNT_HIGH,
+          ...secretHash3,
+        ],
       });
     });
 
@@ -293,7 +391,14 @@ describe("Starknet HTLC", () => {
       await alice.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "initiate_on_behalf",
-        calldata: [alice.address, bob.address, 10n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash4],
+        calldata: [
+          alice.address,
+          bob.address,
+          10n,
+          AMOUNT_LOW,
+          AMOUNT_HIGH,
+          ...secretHash4,
+        ],
       });
     });
   });
@@ -320,6 +425,49 @@ describe("Starknet HTLC", () => {
       chainId: "0x534e5f5345504f4c4941", // SN_SEPOLIA
       revision: TypedDataRevision.ACTIVE,
     };
+
+    it("Should not able to initiate with no redeemer.", async () => {
+      await expect(
+        alice.execute({
+          contractAddress: starknetHTLC.address,
+          entrypoint: "initiate",
+          calldata: [
+            ZERO_ADDRESS,
+            TIMELOCK,
+            AMOUNT_LOW,
+            AMOUNT_HIGH,
+            ...secretHash1,
+          ], // Cairo expects parameters in this format
+        })
+      ).rejects.toThrow("HTLC: zero address redeemer");
+    });
+
+    it("Should not able to initiate a swap with no amount.", async () => {
+      const zeroU256 = { low: 0n, high: 0n };
+      await expect(
+        alice.execute({
+          contractAddress: starknetHTLC.address,
+          entrypoint: "initiate",
+          calldata: [
+            bob.address,
+            TIMELOCK,
+            zeroU256.low,
+            zeroU256.high,
+            ...secretHash1,
+          ],
+        })
+      ).rejects.toThrow("HTLC: zero amount");
+    });
+
+    it("Should not able to initiate a swap with a 0 expiry.", async () => {
+      await expect(
+        alice.execute({
+          contractAddress: starknetHTLC.address,
+          entrypoint: "initiate",
+          calldata: [bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
+        })
+      ).rejects.toThrow("HTLC: zero timelock");
+    });
 
     it("Should not be able to initiate a swap with invalid signature.", async () => {
       const initiate: TypedData = {
@@ -388,7 +536,6 @@ describe("Starknet HTLC", () => {
         ],
       });
     });
-
   });
 
   describe("-- HTLC - Redeem --", () => {
@@ -401,7 +548,7 @@ describe("Starknet HTLC", () => {
         bob.address,
         TIMELOCK,
         AMOUNT,
-        secretHash,
+        secretHash
       );
 
       await expect(
@@ -417,7 +564,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Bob should not be able to redeem a swap with invalid secret.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash1);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash1
+      );
       const invalidSecret = randomBytes(32).toString("hex");
       await expect(
         bob.execute({
@@ -432,7 +586,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Bob should be able to redeem a swap with valid secret.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash1);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash1
+      );
 
       stark.connect(bob);
       const bobOldBalance: bigint = await stark.balanceOf(bob.address);
@@ -451,7 +612,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Bob should not be able to redeem a swap which is already redeemed.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash1);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash1
+      );
       await expect(
         bob.execute({
           contractAddress: starknetHTLC.address,
@@ -465,7 +633,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Bob should receive the correct amount even if Charlie redeems with valid secret.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash2);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash2
+      );
 
       stark.connect(bob);
       const bobOldBalance: bigint = await stark.balanceOf(bob.address);
@@ -509,7 +684,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Alice should not be able to refund a swap that is already redeemed.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash1);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash1
+      );
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
@@ -522,7 +704,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Alice should not be able to refund a swap earlier than the locktime.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash3);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash3
+      );
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
@@ -535,7 +724,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Alice should be able to refund a swap after the locktime.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash3);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash3
+      );
       await mineStarknetBlocks(10);
       const aliceBalanceBefore = await stark.balanceOf(alice.address);
       await charlie.execute({
@@ -550,7 +746,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Alice should be able to refund a swap which is already refunded.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash3);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash3
+      );
       await expect(
         alice.execute({
           contractAddress: starknetHTLC.address,
@@ -563,7 +766,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Alice should receive the correct amount even if Charlie refunds after the locktime.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash4);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash4
+      );
       await mineStarknetBlocks(10);
 
       const aliceBalanceBefore = await stark.balanceOf(alice.address);
@@ -601,10 +811,23 @@ describe("Starknet HTLC", () => {
       await alice.execute({
         contractAddress: starknetHTLC.address,
         entrypoint: "initiate",
-        calldata: [bob.address, TIMELOCK, AMOUNT_LOW,AMOUNT_HIGH, ...secretHash6],
+        calldata: [
+          bob.address,
+          TIMELOCK,
+          AMOUNT_LOW,
+          AMOUNT_HIGH,
+          ...secretHash6,
+        ],
       });
 
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash6);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash6
+      );
 
       const refund: TypedData = {
         domain: DOMAIN,
@@ -632,7 +855,14 @@ describe("Starknet HTLC", () => {
     });
 
     it("Should be able to instant refund swap with correct signature.", async () => {
-      const orderId = generateOrderId(CHAIN_ID,alice.address,bob.address,TIMELOCK,AMOUNT,secretHash6);
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash6
+      );
       const refund: TypedData = {
         domain: DOMAIN,
         primaryType: "instantRefund",
@@ -652,6 +882,31 @@ describe("Starknet HTLC", () => {
         entrypoint: "instant_refund",
         calldata: [orderId, [r, s]],
       });
+    });
+  });
+
+  describe("--- HTLC - Get Order ---", () => {
+    it("Should be able to get order info.", async () => {
+      const orderId = generateOrderId(
+        CHAIN_ID,
+        alice.address,
+        bob.address,
+        TIMELOCK,
+        AMOUNT,
+        secretHash1
+      );
+
+      const orderInfo = (await starknetHTLC.call("get_order", [
+        orderId,
+      ])) as Order;
+
+      expect(orderInfo).toBeTruthy();
+      expect(orderInfo.is_fulfilled).toBe(true);
+      expect(orderInfo.initiator).toBe(BigInt(alice.address));
+      expect(orderInfo.redeemer).toBe(BigInt(bob.address));
+      expect(typeof orderInfo.initiated_at).toBe("bigint");
+      expect(orderInfo.timelock).toBe(TIMELOCK);
+      expect(orderInfo.amount).toBe(AMOUNT);
     });
   });
 
@@ -761,9 +1016,7 @@ describe("Starknet HTLC", () => {
         },
       });
       const aliceBlanceAfterRedeem = await stark.balanceOf(alice.address);
-      expect(aliceBlanceBeforeRedeem + AMOUNT).toBe(
-        aliceBlanceAfterRedeem
-      );
+      expect(aliceBlanceBeforeRedeem + AMOUNT).toBe(aliceBlanceAfterRedeem);
 
       // Bob redeems in EVM
       const orderId = ethers.sha256(
@@ -790,7 +1043,7 @@ describe("Starknet HTLC", () => {
     beforeAll(async () => {
       BTCProvider = new BitcoinProvider(
         BitcoinNetwork.Regtest,
-        BITCOIN_NODE_URL  
+        BITCOIN_NODE_URL
       );
       aliceBitcoinWallet = BitcoinWallet.createRandom(BTCProvider);
       bobBitcoinWallet = BitcoinWallet.createRandom(BTCProvider);

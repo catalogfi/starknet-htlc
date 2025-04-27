@@ -4,7 +4,7 @@ use crate::interface::sn_domain::{StarknetDomain};
 use core::poseidon::{PoseidonTrait};
 use core::hash::{HashStateExTrait, HashStateTrait};
 use crate::htlc::HTLC::{
-    INITIATE_TYPE_HASH, INSTANT_REFUND_TYPE_HASH, CHAIN_ID, NAME, VERSION, U256_TYPE_HASH,
+    INITIATE_TYPE_HASH, INSTANT_REFUND_TYPE_HASH, NAME, VERSION, U256_TYPE_HASH,
 };
 
 #[derive(Drop, Copy, Hash, Serde, Debug)]
@@ -21,9 +21,9 @@ pub struct instantRefund {
 }
 
 pub impl MessageHashInitiate of IMessageHash<Initiate> {
-    fn get_message_hash(self: @Initiate, signer: ContractAddress) -> felt252 {
+    fn get_message_hash(self: @Initiate, chain_id: felt252, signer: ContractAddress) -> felt252 {
         let domain = StarknetDomain {
-            name: NAME, version: VERSION, chain_id: CHAIN_ID, revision: 1,
+            name: NAME, version: VERSION, chain_id: chain_id, revision: 1,
         };
         let mut state = PoseidonTrait::new();
         state = state.update_with('StarkNet Message');
@@ -66,9 +66,11 @@ pub impl StructHashSpanU32 of IStructHash<Span<u32>> {
 }
 
 pub impl MessageHashInstantRefund of IMessageHash<instantRefund> {
-    fn get_message_hash(self: @instantRefund, signer: ContractAddress) -> felt252 {
+    fn get_message_hash(
+        self: @instantRefund, chain_id: felt252, signer: ContractAddress,
+    ) -> felt252 {
         let domain = StarknetDomain {
-            name: NAME, version: VERSION, chain_id: CHAIN_ID, revision: 1,
+            name: NAME, version: VERSION, chain_id: chain_id, revision: 1,
         };
         let mut state = PoseidonTrait::new();
         state = state.update_with('StarkNet Message');

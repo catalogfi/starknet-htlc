@@ -26,6 +26,8 @@ async function main() {
     nodeUrl: rpcUrl,
   });
 
+  const chainId = await provider.getChainId();
+
   console.log(`Deploying to ${network}...`);
   console.log(`RPC URL: ${rpcUrl}`);
   console.log(`Token address: ${tokenAddress}`);
@@ -48,6 +50,7 @@ async function main() {
 
     const callData = new CallData(sierraCode.abi);
     const constructor = callData.compile("constructor", {
+      chain_id : chainId,
       token: tokenAddress,
     });
     console.log("Declaring and deploying contract...");
