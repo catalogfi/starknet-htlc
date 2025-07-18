@@ -11,46 +11,48 @@
 //!          Redeemer function: 1. redeem
 #[starknet::contract]
 pub mod HTLC {
-    use starknet::SyscallResultTrait;
-use core::num::traits::Zero;
-    use starknet::{ContractAddress, get_caller_address, get_block_info, get_contract_address};
-    use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerWriteAccess,
-        StoragePointerReadAccess
-    };
-    use core::poseidon::{PoseidonTrait};
+    use core::hash::{HashStateExTrait, HashStateTrait};
+    use core::num::traits::Zero;
     use core::option::OptionTrait;
-    use core::traits::{Into, TryInto};
+    use core::poseidon::PoseidonTrait;
     use core::sha256::compute_sha256_u32_array;
-    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use core::starknet::event::EventEmitter;
+    use core::traits::{Into, TryInto};
     use openzeppelin::account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
-    use core::hash::{HashStateTrait, HashStateExTrait};
-    use crate::interface::{IHTLC, IMessageHash};
-    use crate::interface::struct_hash::{
-        Initiate, MessageHashInitiate, instantRefund, MessageHashInstantRefund,
+    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::syscalls::get_execution_info_v2_syscall;
+    use starknet::{
+        ContractAddress, SyscallResultTrait, get_block_info, get_caller_address,
+        get_contract_address,
     };
     use crate::interface::events::{Initiated, Redeemed, Refunded};
-    use core::starknet::event::EventEmitter;
-    use starknet::syscalls::get_execution_info_v2_syscall;
+    use crate::interface::struct_hash::{
+        Initiate, MessageHashInitiate, MessageHashInstantRefund, instantRefund,
+    };
+    use crate::interface::{IHTLC, IMessageHash};
 
 
     pub const NAME: felt252 = 'HTLC';
     pub const VERSION: felt252 = '1';
 
     pub const INITIATE_TYPE_HASH: felt252 = selector!(
-        "\"Initiate\"(\"redeemer\":\"ContractAddress\",\"amount\":\"u256\",\"timelock\":\"u128\",\"secretHash\":\"u128*\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
+        "\"Initiate\"(\"redeemer\":\"ContractAddress\",\"amount\":\"u256\",\"timelock\":\"u128\",\"secretHash\":\"u128*\",\"destinationData\":\"felt*\",\"verifyingContract\":\"ContractAddress\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
     );
     pub const U256_TYPE_HASH: felt252 = selector!("\"u256\"(\"low\":\"u128\",\"high\":\"u128\")");
 
     pub const INSTANT_REFUND_TYPE_HASH: felt252 = selector!(
-        "\"instantRefund\"(\"orderID\":\"felt\")",
+        "\"instantRefund\"(\"orderID\":\"felt\",\"verifyingContract\":\"ContractAddress\")",
     );
 
 
     #[storage]
     struct Storage {
         pub token: IERC20Dispatcher,
-        pub orders: Map::<felt252, Order>,
+        pub orders: Map<felt252, Order>,
         pub chain_id: felt252,
     }
 
@@ -99,16 +101,21 @@ use core::num::traits::Zero;
         /// @param   timelock  Timelock period for the HTLC order.
         /// @param   amount  Amount of tokens to trade.
         /// @param   secret_hash  SHA-256 hash of the secret used for redemption.
+        /// @param   destination_data  Cross-chain destination data as LongString (Array<felt252>).
         fn initiate(
             ref self: ContractState,
             redeemer: ContractAddress,
             timelock: u128,
             amount: u256,
             secret_hash: [u32; 8],
+            destination_data: Array<felt252>,
         ) {
             self.safe_params(redeemer, timelock, amount);
             let sender = get_caller_address();
-            self._initiate(sender, sender, redeemer, timelock, amount, secret_hash);
+            self
+                ._initiate(
+                    sender, sender, redeemer, timelock, amount, secret_hash, destination_data,
+                );
         }
 
         /// @notice  Allows a signer to initiate an order on behalf of another initiator.
@@ -120,6 +127,7 @@ use core::num::traits::Zero;
         /// @param   timelock     Timelock period for the HTLC order.
         /// @param   amount       Amount of tokens to be locked.
         /// @param   secret_hash  SHA-256 hash of the secret used for redemption.
+        /// @param   destination_data  Cross-chain destination data as LongString (Array<felt252>).
         fn initiate_on_behalf(
             ref self: ContractState,
             initiator: ContractAddress,
@@ -127,10 +135,14 @@ use core::num::traits::Zero;
             timelock: u128,
             amount: u256,
             secret_hash: [u32; 8],
+            destination_data: Array<felt252>,
         ) {
             self.safe_params(redeemer, timelock, amount);
             let sender = get_caller_address();
-            self._initiate(sender, initiator, redeemer, timelock, amount, secret_hash);
+            self
+                ._initiate(
+                    sender, initiator, redeemer, timelock, amount, secret_hash, destination_data,
+                );
         }
 
         /// @notice  Signers can create an order with order params and signature for a user.
@@ -143,6 +155,7 @@ use core::num::traits::Zero;
         /// @param   timelock  Timelock period for the HTLC order.
         /// @param   amount  Amount of tokens to trade.
         /// @param   secret_hash  SHA-256 hash of the secret used for redemption.
+        /// @param   destination_data  Cross-chain destination data as LongString (Array<felt252>).
         /// @param   signature  SNIP-12 signature provided by an authorized user for initiation.
         ///                     The user will be assigned as the initiator.
         fn initiate_with_signature(
@@ -152,10 +165,19 @@ use core::num::traits::Zero;
             timelock: u128,
             amount: u256,
             secret_hash: [u32; 8],
+            destination_data: Array<felt252>,
             signature: Array<felt252>,
         ) {
             self.safe_params(redeemer, timelock, amount);
-            let intiate = Initiate { redeemer, amount, timelock, secretHash: secret_hash };
+            let verifying_contract = get_contract_address();
+            let intiate = Initiate {
+                redeemer,
+                amount,
+                timelock,
+                secretHash: secret_hash,
+                destinationData: destination_data.clone(),
+                verifyingContract: verifying_contract,
+            };
             let chain_id = self.chain_id.read();
             let message_hash = intiate.get_message_hash(chain_id, initiator);
 
@@ -164,7 +186,10 @@ use core::num::traits::Zero;
             let is_valid_signature = is_valid == starknet::VALIDATED || is_valid == 1;
             assert!(is_valid_signature, "HTLC: invalid initiator signature");
 
-            self._initiate(initiator, initiator, redeemer, timelock, amount, secret_hash);
+            self
+                ._initiate(
+                    initiator, initiator, redeemer, timelock, amount, secret_hash, destination_data,
+                );
         }
 
         /// @notice  Signers with the correct secret to an order's secret hash can redeem to claim
@@ -192,11 +217,11 @@ use core::num::traits::Zero;
                 self
                     .generate_order_id(
                         chain_id,
+                        secret_hash,
                         initiator_address,
                         redeemer_address,
                         order.timelock,
                         order.amount,
-                        secret_hash,
                     ) == order_id,
                 "HTLC: incorrect secret",
             );
@@ -234,23 +259,33 @@ use core::num::traits::Zero;
 
         /// @notice  Redeemers can let the initiator refund the locked assets before the expiry
         /// block number.
-        /// @dev     Signers cannot refund the same order multiple times.
+        /// @dev     If the caller is the redeemer, no signature is required. If the caller is not
+        ///          the redeemer, a valid signature from the redeemer is required.
+        ///          Signers cannot refund the same order multiple times.
         ///          Funds will be safely transferred to the initiator.
         ///
         /// @param   order_id  Order ID of the HTLC order.
         /// @param   signature  SNIP-12 signature provided by the redeemer for instant refund.
+        ///                     Can be empty if the caller is the redeemer.
         fn instant_refund(ref self: ContractState, order_id: felt252, signature: Array<felt252>) {
-            let refund = instantRefund { orderID: order_id };
-
             let order = self.orders.read(order_id);
-            let chain_id = self.chain_id.read();
-            let message_hash = refund.get_message_hash(chain_id, order.redeemer);
-
-            let is_valid = ISRC6Dispatcher { contract_address: order.redeemer }
-                .is_valid_signature(message_hash, signature);
-            let is_valid_signature = is_valid == starknet::VALIDATED || is_valid == 1;
-            assert!(is_valid_signature, "HTLC: invalid redeemer signature");
+            assert!(order.redeemer.is_non_zero(), "HTLC: order not initiated");
             assert!(!order.is_fulfilled, "HTLC: order fulfilled");
+
+            let caller = get_caller_address();
+            
+            // If caller is not the redeemer, require a valid signature
+            if caller != order.redeemer {
+                let verifying_contract = get_contract_address();
+                let refund = instantRefund { orderID: order_id, verifyingContract: verifying_contract };
+                let chain_id = self.chain_id.read();
+                let message_hash = refund.get_message_hash(chain_id, order.redeemer);
+
+                let is_valid = ISRC6Dispatcher { contract_address: order.redeemer }
+                    .is_valid_signature(message_hash, signature);
+                let is_valid_signature = is_valid == starknet::VALIDATED || is_valid == 1;
+                assert!(is_valid_signature, "HTLC: invalid redeemer signature");
+            }
 
             self.orders.write(order_id, Order { is_fulfilled: true, ..order });
 
@@ -276,6 +311,7 @@ use core::num::traits::Zero;
         /// @param   secret_hash  Hash of the secret used for redemption.
         /// @param   timelock  Timelock block number for the atomic swap.
         /// @param   amount  Amount of tokens to be traded in the atomic swap.
+        /// @param   destination_data  Cross-chain destination data as LongString (Array<felt252>).
         fn _initiate(
             ref self: ContractState,
             funder_: ContractAddress,
@@ -284,6 +320,7 @@ use core::num::traits::Zero;
             timelock_: u128,
             amount_: u256,
             secret_hash_: [u32; 8],
+            destination_data_: Array<felt252>,
         ) {
             assert!(initiator_ != redeemer_, "HTLC: same initiator & redeemer");
 
@@ -296,7 +333,7 @@ use core::num::traits::Zero;
             let chain_id = self.chain_id.read();
             let order_id = self
                 .generate_order_id(
-                    chain_id, initiator_address, redeemer_address, timelock_, amount_, secret_hash_,
+                    chain_id, secret_hash_, initiator_address, redeemer_address, timelock_, amount_,
                 );
 
             let order: Order = self.orders.read(order_id);
@@ -324,7 +361,12 @@ use core::num::traits::Zero;
             self
                 .emit(
                     Event::Initiated(
-                        Initiated { order_id, secret_hash: secret_hash_, amount: amount_ },
+                        Initiated {
+                            order_id,
+                            secret_hash: secret_hash_,
+                            amount: amount_,
+                            destination_data: destination_data_,
+                        },
                     ),
                 );
         }
@@ -338,20 +380,20 @@ use core::num::traits::Zero;
         fn generate_order_id(
             self: @ContractState,
             chain_id: felt252,
+            secret_hash: [u32; 8],
             initiator_address: felt252,
             redeemer_address: felt252,
             timelock: u128,
             amount: u256,
-            secret_hash: [u32; 8],
         ) -> felt252 {
             let mut state = PoseidonTrait::new();
             state = state.update(chain_id);
+            state = state.update_with(secret_hash);
             state = state.update(initiator_address);
             state = state.update(redeemer_address);
             state = state.update(timelock.into());
             state = state.update(amount.low.into());
             state = state.update(amount.high.into());
-            state = state.update_with(secret_hash);
             state.finalize()
         }
     }

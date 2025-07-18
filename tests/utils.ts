@@ -100,7 +100,7 @@ export function generateOrderId(
   secretHash: number[]
 ): bigint {
   const amountCairo = cairo.uint256(amount as BigNumberish);
-  const inputs = [BigInt(chainId),initiatorAddress,redeemerAddress,timelock as BigNumberish,amountCairo.low,amountCairo.high, ...secretHash];
+  const inputs = [BigInt(chainId), ...secretHash, initiatorAddress,redeemerAddress,timelock as BigNumberish,amountCairo.low,amountCairo.high];
   const orderId = hash.computePoseidonHashOnElements(inputs);
   return BigInt(orderId);
 }

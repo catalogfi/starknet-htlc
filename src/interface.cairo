@@ -1,6 +1,6 @@
+pub mod events;
 pub mod sn_domain;
 pub mod struct_hash;
-pub mod events;
 use starknet::ContractAddress;
 use crate::htlc::HTLC::Order;
 
@@ -16,6 +16,7 @@ pub trait IHTLC<TContractState> {
         timelock: u128,
         amount: u256,
         secret_hash: [u32; 8],
+        destination_data: Array<felt252>,
     );
 
     fn initiate_on_behalf(
@@ -25,6 +26,7 @@ pub trait IHTLC<TContractState> {
         timelock: u128,
         amount: u256,
         secret_hash: [u32; 8],
+        destination_data: Array<felt252>,
     );
 
     fn initiate_with_signature(
@@ -34,6 +36,7 @@ pub trait IHTLC<TContractState> {
         timelock: u128,
         amount: u256,
         secret_hash: [u32; 8],
+        destination_data: Array<felt252>,
         signature: Array<felt252>,
     );
 
