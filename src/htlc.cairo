@@ -371,12 +371,16 @@ pub mod HTLC {
                 );
         }
 
-        /// @notice  Generates a unique swap ID based on chain ID, asset address, and user address.
+        /// @notice  Generates a unique order ID based on chain ID, secret hash, initiator, redeemer, timelock, amount, and contract address.
         /// @dev     Uses the Poseidon hash function to ensure uniqueness and security.
+        ///          Follows the same order as Solidity: chainId, secretHash, initiator, redeemer, timelock, amount, address(this)
         ///
-        /// @param   chain_id       Chain ID where the swap is being executed.
-        /// @param   asset_address  Address of the asset being swapped.
-        /// @param   user_address   Address of the user initiating the swap.
+        /// @param   chain_id           Chain ID where the swap is being executed.
+        /// @param   secret_hash        SHA-256 hash of the secret used for redemption.
+        /// @param   initiator_address  Address of the initiator of the atomic swap.
+        /// @param   redeemer_address   Address of the redeemer of the atomic swap.
+        /// @param   timelock           Timelock period for the HTLC order.
+        /// @param   amount             Amount of tokens to be traded in the atomic swap.
         fn generate_order_id(
             self: @ContractState,
             chain_id: felt252,
@@ -386,6 +390,7 @@ pub mod HTLC {
             timelock: u128,
             amount: u256,
         ) -> felt252 {
+            let contract_address: felt252 = get_contract_address().try_into().expect('HTLC: invalid contract address');
             let mut state = PoseidonTrait::new();
             state = state.update(chain_id);
             state = state.update_with(secret_hash);
@@ -394,6 +399,7 @@ pub mod HTLC {
             state = state.update(timelock.into());
             state = state.update(amount.low.into());
             state = state.update(amount.high.into());
+            state = state.update(contract_address);
             state.finalize()
         }
     }
