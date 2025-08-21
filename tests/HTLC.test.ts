@@ -73,13 +73,6 @@ describe("Starknet HTLC", () => {
   const AMOUNT = parseEther("1");
   const { low: AMOUNT_LOW, high: AMOUNT_HIGH } = cairo.uint256(AMOUNT);
   
-  // Default destination data as LongString (Array<felt252>)
-  const DEFAULT_DESTINATION_DATA = [
-    shortString.encodeShortString("cross-chain"),
-    shortString.encodeShortString("ethereum"),
-    shortString.encodeShortString("0x742d35Cc6Cc6cF77f6c"),
-  ];
-
   let stark: Contract;
   let starknetHTLC: Contract;
   let callData: CallData;
@@ -111,7 +104,7 @@ describe("Starknet HTLC", () => {
   let sierraCode: any, casmCode: any;
 
   interface Order {
-    is_fulfilled: boolean;
+    fulfilled_at: bigint;
     initiator: bigint;
     redeemer: bigint;
     initiated_at: bigint;
@@ -219,7 +212,6 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash1,
-            DEFAULT_DESTINATION_DATA,
           ], // Cairo expects parameters in this format
         })
       ).rejects.toThrow("HTLC: zero address redeemer");
@@ -237,7 +229,6 @@ describe("Starknet HTLC", () => {
             zeroU256.low,
             zeroU256.high,
             ...secretHash1,
-            DEFAULT_DESTINATION_DATA,
           ],
         })
       ).rejects.toThrow("HTLC: zero amount");
@@ -248,7 +239,7 @@ describe("Starknet HTLC", () => {
         alice.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate",
-          calldata: [bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1, DEFAULT_DESTINATION_DATA],
+          calldata: [bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
         })
       ).rejects.toThrow("HTLC: zero timelock");
     });
@@ -264,7 +255,7 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash1,
-            DEFAULT_DESTINATION_DATA,
+            
           ],
         })
       ).rejects.toThrow("HTLC: same initiator & redeemer");
@@ -276,7 +267,7 @@ describe("Starknet HTLC", () => {
         alice.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate",
-          calldata: [bob.address, TIMELOCK, low, high, ...secretHash1, DEFAULT_DESTINATION_DATA],
+          calldata: [bob.address, TIMELOCK, low, high, ...secretHash1],
         })
       ).rejects.toThrow("ERC20: insufficient allowance");
     });
@@ -291,7 +282,7 @@ describe("Starknet HTLC", () => {
         bob.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate",
-          calldata: [alice.address, TIMELOCK, low, high, ...secretHash1, DEFAULT_DESTINATION_DATA],
+          calldata: [alice.address, TIMELOCK, low, high, ...secretHash1],
         })
       ).rejects.toThrow("ERC20: insufficient balance");
     });
@@ -306,14 +297,13 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash1,
-          DEFAULT_DESTINATION_DATA,
+          
         ],
       });
 
       console.log("Transaction successful. Hash:", result.transaction_hash);
-      console.log("Destination data used:", DEFAULT_DESTINATION_DATA.map(x => shortString.decodeShortString(x)));
       
-      // Test passes if transaction is successful - this means the contract accepts the destination data
+      // Test passes if transaction is successful
       expect(result.transaction_hash).toBeDefined();
     });
 
@@ -328,7 +318,7 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash1,
-            DEFAULT_DESTINATION_DATA,
+            
           ],
         })
       ).rejects.toThrow("HTLC: duplicate order");
@@ -344,7 +334,7 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash2,
-          DEFAULT_DESTINATION_DATA,
+          
         ],
       });
     });
@@ -363,7 +353,7 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash1,
-            DEFAULT_DESTINATION_DATA,
+            
           ],
         })
       ).rejects.toThrow("HTLC: zero address redeemer");
@@ -382,7 +372,7 @@ describe("Starknet HTLC", () => {
             zeroU256.low,
             zeroU256.high,
             ...secretHash1,
-            DEFAULT_DESTINATION_DATA,
+            
           ],
         })
       ).rejects.toThrow("HTLC: zero amount");
@@ -393,7 +383,7 @@ describe("Starknet HTLC", () => {
         alice.execute({
           contractAddress: starknetHTLC.address,
           entrypoint: "initiate_on_behalf",
-          calldata: [alice.address,bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1, DEFAULT_DESTINATION_DATA],
+          calldata: [alice.address,bob.address, 0n, AMOUNT_LOW, AMOUNT_HIGH, ...secretHash1],
         })
       ).rejects.toThrow("HTLC: zero timelock");
     });
@@ -409,7 +399,7 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash3,
-          DEFAULT_DESTINATION_DATA,
+          
         ],
       });
     });
@@ -425,7 +415,7 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash4,
-          DEFAULT_DESTINATION_DATA,
+          
         ],
       });
     });
@@ -444,7 +434,6 @@ describe("Starknet HTLC", () => {
         { name: "amount", type: "u256" },
         { name: "timelock", type: "u128" },
         { name: "secretHash", type: "u128*" },
-        { name: "destinationData", type: "felt*" },
         { name: "verifyingContract", type: "ContractAddress" },
       ],
     };
@@ -467,7 +456,6 @@ describe("Starknet HTLC", () => {
           amount: cairo.uint256(AMOUNT),
           timelock: TIMELOCK,
           secretHash: secretHash7,
-          destinationData: DEFAULT_DESTINATION_DATA,
           verifyingContract: starknetHTLC.address,
         },
       };
@@ -488,8 +476,6 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash7,
-            DEFAULT_DESTINATION_DATA.length,
-            ...DEFAULT_DESTINATION_DATA,
             [r, s],
           ],
         })
@@ -507,7 +493,6 @@ describe("Starknet HTLC", () => {
           amount: cairo.uint256(0),
           timelock: TIMELOCK,
           secretHash: secretHash7,
-          destinationData: DEFAULT_DESTINATION_DATA,
           verifyingContract: starknetHTLC.address,
         },
       };
@@ -529,8 +514,6 @@ describe("Starknet HTLC", () => {
             zeroU256.low,
             zeroU256.high,
             ...secretHash7,
-            DEFAULT_DESTINATION_DATA.length,
-            ...DEFAULT_DESTINATION_DATA,
             [r, s],
           ],
         })
@@ -547,7 +530,6 @@ describe("Starknet HTLC", () => {
           amount: cairo.uint256(AMOUNT),
           timelock: 0,
           secretHash: secretHash7,
-          destinationData: DEFAULT_DESTINATION_DATA,
           verifyingContract: starknetHTLC.address,
         },
       };
@@ -568,8 +550,6 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash7,
-            DEFAULT_DESTINATION_DATA.length,
-            ...DEFAULT_DESTINATION_DATA,
             [r, s],
           ],
         })
@@ -586,7 +566,6 @@ describe("Starknet HTLC", () => {
           amount: cairo.uint256(AMOUNT),
           timelock: TIMELOCK,
           secretHash: secretHash7,
-          destinationData: DEFAULT_DESTINATION_DATA,
           verifyingContract: starknetHTLC.address,
         },
       };
@@ -607,8 +586,6 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHash7,
-            DEFAULT_DESTINATION_DATA.length,
-            ...DEFAULT_DESTINATION_DATA,
             [r, s],
           ],
         })
@@ -625,7 +602,6 @@ describe("Starknet HTLC", () => {
           amount: cairo.uint256(AMOUNT),
           timelock: TIMELOCK,
           secretHash: secretHash5,
-          destinationData: DEFAULT_DESTINATION_DATA,
           verifyingContract: starknetHTLC.address,
         },
       };
@@ -645,8 +621,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash5,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
           [r, s],
         ],
       });
@@ -932,8 +906,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash6,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
         ],
       });
 
@@ -1012,8 +984,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash7,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
         ],
       });
 
@@ -1044,8 +1014,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHash8,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
         ],
       });
 
@@ -1083,7 +1051,7 @@ describe("Starknet HTLC", () => {
       ])) as Order;
 
       expect(orderInfo).toBeTruthy();
-      expect(orderInfo.is_fulfilled).toBe(true);
+      expect(orderInfo.fulfilled_at).toBe(0);
       expect(orderInfo.initiator).toBe(BigInt(alice.address));
       expect(orderInfo.redeemer).toBe(BigInt(bob.address));
       expect(typeof orderInfo.initiated_at).toBe("bigint");
@@ -1177,8 +1145,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHashArray.map(BigInt),
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
         ],
       });
 
@@ -1286,8 +1252,6 @@ describe("Starknet HTLC", () => {
           low,
           high,
           ...secretHashArray.map(BigInt),
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
         ],
       });
 
@@ -1350,7 +1314,6 @@ describe("Starknet HTLC", () => {
         { name: "amount", type: "u256" },
         { name: "timelock", type: "u128" },
         { name: "secretHash", type: "u128*" },
-        { name: "destinationData", type: "felt*" },
         { name: "verifyingContract", type: "ContractAddress" },
       ],
     };
@@ -1414,7 +1377,6 @@ describe("Starknet HTLC", () => {
           amount: cairo.uint256(AMOUNT),
           timelock: TIMELOCK,
           secretHash: secretHashForReplay,
-          destinationData: DEFAULT_DESTINATION_DATA,
           verifyingContract: starknetHTLC.address, // Signature for FIRST contract
         },
       };
@@ -1433,8 +1395,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHashForReplay,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
           [r, s],
         ],
       });
@@ -1451,8 +1411,6 @@ describe("Starknet HTLC", () => {
             AMOUNT_LOW,
             AMOUNT_HIGH,
             ...secretHashForReplay,
-            DEFAULT_DESTINATION_DATA.length,
-            ...DEFAULT_DESTINATION_DATA,
             [r, s], // Same signature from first contract
           ],
         })
@@ -1472,8 +1430,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHashForRefund,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
         ],
       });
 
@@ -1487,8 +1443,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHashForRefund,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
         ],
       });
 
@@ -1552,7 +1506,6 @@ describe("Starknet HTLC", () => {
           amount: cairo.uint256(AMOUNT),
           timelock: TIMELOCK,
           secretHash: secretHashForValid,
-          destinationData: DEFAULT_DESTINATION_DATA,
           verifyingContract: secondHTLC.address, // Signature for SECOND contract
         },
       };
@@ -1571,8 +1524,6 @@ describe("Starknet HTLC", () => {
           AMOUNT_LOW,
           AMOUNT_HIGH,
           ...secretHashForValid,
-          DEFAULT_DESTINATION_DATA.length,
-          ...DEFAULT_DESTINATION_DATA,
           [r, s],
         ],
       });
@@ -1587,7 +1538,7 @@ describe("Starknet HTLC", () => {
       , secondHTLC.address);
 
       const orderInfo = (await secondHTLC.call("get_order", [orderId])) as Order;
-      expect(orderInfo.is_fulfilled).toBe(false);
+      expect(orderInfo.fulfilled_at).toBe(BigInt(0));
       expect(orderInfo.initiator).toBe(BigInt(alice.address));
       expect(orderInfo.redeemer).toBe(BigInt(bob.address));
     });

@@ -4,6 +4,14 @@ pub struct Initiated {
     pub order_id: felt252,
     pub secret_hash: [u32; 8],
     pub amount: u256,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct InitiatedOnBehalf {
+    #[key]
+    pub order_id: felt252,
+    pub secret_hash: [u32; 8],
+    pub amount: u256,
     pub destination_data: Array<felt252>,
 }
 

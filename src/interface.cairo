@@ -16,10 +16,18 @@ pub trait IHTLC<TContractState> {
         timelock: u128,
         amount: u256,
         secret_hash: [u32; 8],
-        destination_data: Array<felt252>,
     );
 
     fn initiate_on_behalf(
+        ref self: TContractState,
+        initiator: ContractAddress,
+        redeemer: ContractAddress,
+        timelock: u128,
+        amount: u256,
+        secret_hash: [u32; 8],
+    );
+
+    fn initiate_on_behalf_with_destination_data(
         ref self: TContractState,
         initiator: ContractAddress,
         redeemer: ContractAddress,
@@ -36,7 +44,6 @@ pub trait IHTLC<TContractState> {
         timelock: u128,
         amount: u256,
         secret_hash: [u32; 8],
-        destination_data: Array<felt252>,
         signature: Array<felt252>,
     );
 

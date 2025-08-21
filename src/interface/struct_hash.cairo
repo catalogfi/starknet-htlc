@@ -13,7 +13,6 @@ pub struct Initiate {
     pub amount: u256,
     pub timelock: u128,
     pub secretHash: [u32; 8],
-    pub destinationData: Array<felt252>,
     pub verifyingContract: ContractAddress,
 }
 
@@ -45,17 +44,6 @@ pub impl StructHashInitiate of IStructHash<Initiate> {
         state = state.update_with(self.amount.get_struct_hash());
         state = state.update_with(*self.timelock);
         state = state.update_with(self.secretHash.span().get_struct_hash());
-
-        // Hash the destination data manually
-        let mut dest_state = PoseidonTrait::new();
-        let mut i = 0;
-        while i < self.destinationData.len() {
-            dest_state = dest_state.update(*self.destinationData.at(i));
-            i += 1;
-        }
-        let destination_data_hash = dest_state.finalize();
-        state = state.update_with(destination_data_hash);
-
         state = state.update_with(*self.verifyingContract);
         state.finalize()
     }
