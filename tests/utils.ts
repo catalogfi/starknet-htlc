@@ -93,14 +93,16 @@ export function u32ArrayToHex(
 
 export function generateOrderId(
   chainId: string,
+  secretHash: number[],
   initiatorAddress: string,
   redeemerAddress: string,
   timelock: BigInt,
-  amount : BigInt,
-  secretHash: number[]
+  amount: BigInt,
+  contractAddress: string
 ): bigint {
   const amountCairo = cairo.uint256(amount as BigNumberish);
-  const inputs = [BigInt(chainId),initiatorAddress,redeemerAddress,timelock as BigNumberish,amountCairo.low,amountCairo.high, ...secretHash];
+  // Order must match contract: chainId, secretHash (spread), initiator, redeemer, timelock, amount.low, amount.high, contractAddress
+  const inputs = [BigInt(chainId), ...secretHash, initiatorAddress, redeemerAddress, timelock as BigNumberish, amountCairo.low, amountCairo.high, contractAddress];
   const orderId = hash.computePoseidonHashOnElements(inputs);
   return BigInt(orderId);
 }

@@ -1,23 +1,25 @@
-use starknet::ContractAddress;
-use crate::interface::{IMessageHash, IStructHash};
-use crate::interface::sn_domain::{StarknetDomain};
-use core::poseidon::{PoseidonTrait};
 use core::hash::{HashStateExTrait, HashStateTrait};
+use core::poseidon::PoseidonTrait;
+use starknet::ContractAddress;
 use crate::htlc::HTLC::{
-    INITIATE_TYPE_HASH, INSTANT_REFUND_TYPE_HASH, NAME, VERSION, U256_TYPE_HASH,
+    INITIATE_TYPE_HASH, INSTANT_REFUND_TYPE_HASH, NAME, U256_TYPE_HASH, VERSION,
 };
+use crate::interface::sn_domain::StarknetDomain;
+use crate::interface::{IMessageHash, IStructHash};
 
-#[derive(Drop, Copy, Hash, Serde, Debug)]
+#[derive(Drop, Serde, Debug)]
 pub struct Initiate {
     pub redeemer: ContractAddress,
     pub amount: u256,
     pub timelock: u128,
     pub secretHash: [u32; 8],
+    pub verifyingContract: ContractAddress,
 }
 
 #[derive(Drop, Copy, Hash, Serde, Debug)]
 pub struct instantRefund {
     pub orderID: felt252,
+    pub verifyingContract: ContractAddress,
 }
 
 pub impl MessageHashInitiate of IMessageHash<Initiate> {
@@ -42,6 +44,7 @@ pub impl StructHashInitiate of IStructHash<Initiate> {
         state = state.update_with(self.amount.get_struct_hash());
         state = state.update_with(*self.timelock);
         state = state.update_with(self.secretHash.span().get_struct_hash());
+        state = state.update_with(*self.verifyingContract);
         state.finalize()
     }
 }
@@ -60,7 +63,7 @@ pub impl StructHashSpanU32 of IStructHash<Span<u32>> {
         let mut state = PoseidonTrait::new();
         for el in (*self) {
             state = state.update_with(*el);
-        };
+        }
         state.finalize()
     }
 }
@@ -86,6 +89,7 @@ pub impl StructHashInstantRefund of IStructHash<instantRefund> {
         let mut state = PoseidonTrait::new();
         state = state.update_with(INSTANT_REFUND_TYPE_HASH);
         state = state.update_with(*self.orderID);
+        state = state.update_with(*self.verifyingContract);
         state.finalize()
     }
 }

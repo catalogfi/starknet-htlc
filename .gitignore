@@ -6,3 +6,6 @@ deployments
 .snfoundry_cache
 .DS_Store
 *.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

@@ -1,5 +1,5 @@
-use crate::interface::{IStructHash};
 use core::poseidon::poseidon_hash_span;
+use crate::interface::IStructHash;
 
 #[derive(Hash, Drop, Copy)]
 pub struct StarknetDomain {
