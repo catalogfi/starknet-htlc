@@ -7,7 +7,7 @@ pub struct Initiated {
 }
 
 #[derive(Drop, starknet::Event)]
-pub struct InitiatedOnBehalf {
+pub struct InitiatedWithDestinationData {
     #[key]
     pub order_id: felt252,
     pub secret_hash: [u32; 8],

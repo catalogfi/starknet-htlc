@@ -1,4 +1,4 @@
-[package] # the package section 
+[package] # the package section
 name = "starknet_htlc"
 version = "0.1.0"
 edition = "2024_07" # Cairo Prelude - most commonly used modules, functions, data types and traits that are broughts into scope without needing to import them
@@ -6,17 +6,17 @@ edition = "2024_07" # Cairo Prelude - most commonly used modules, functions, dat
 # See more keys and their definitions at https://docs.swmansion.com/scarb/docs/reference/manifest.html
 
 [dependencies] # used during your build compilation
-starknet = "2.9.2"
+starknet = ">=2.9.2"
 openzeppelin = "0.20.0"
 openzeppelin_token = "0.20.0"
 openzeppelin_utils = "0.20.0"
-alexandria_bytes = { git = "https://github.com/keep-starknet-strange/alexandria.git" }
-alexandria_encoding = { git = "https://github.com/keep-starknet-strange/alexandria.git" }
-
+alexandria_bytes = { git = "https://github.com/keep-starknet-strange/alexandria.git", tag = "v0.5.1" }
+alexandria_encoding = { git = "https://github.com/keep-starknet-strange/alexandria.git", tag = "v0.5.1" }
 
 [dev-dependencies] # used during your test compilation
-snforge_std = "0.36.0"
-assert_macros = "2.9.2" # allows the usage of macros such as assert_eq!, _ne!, etc 
+cairo_test = "2.12.0"
+snforge_std = "0.48.1"
+assert_macros = "2.12.0"  # allows the usage of macros such as assert_eq!, _ne!, etc
 
 [[target.starknet-contract]] # allows to build the package as a starknet contract
 sierra = true
@@ -24,6 +24,10 @@ casm= true
 
 [scripts]
 test = "snforge test"
+
+[tool.scarb]
+allow-prebuilt-plugins = ["snforge_std"]
+
 
 # Visit https://foundry-rs.github.io/starknet-foundry/appendix/scarb-toml.html for more information
 
@@ -39,7 +43,7 @@ test = "snforge test"
 
 # [[tool.snforge.fork]]
 # name = "SOME_SECOND_NAME"
-# url = "http://your.second.rpc.url"                         
+# url = "http://your.second.rpc.url"
 # block_id.number = "123"                                    # Block to fork from (block number)
 
 # [[tool.snforge.fork]]
