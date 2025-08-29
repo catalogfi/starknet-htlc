@@ -102,21 +102,30 @@ export function generateOrderId(
 ): bigint {
   const amountCairo = cairo.uint256(amount as BigNumberish);
   // Order must match contract: chainId, secretHash (spread), initiator, redeemer, timelock, amount.low, amount.high, contractAddress
-  const inputs = [BigInt(chainId), ...secretHash, initiatorAddress, redeemerAddress, timelock as BigNumberish, amountCairo.low, amountCairo.high, contractAddress];
+  const inputs = [
+    BigInt(chainId),
+    ...secretHash,
+    initiatorAddress,
+    redeemerAddress,
+    timelock as BigNumberish,
+    amountCairo.low,
+    amountCairo.high,
+    contractAddress,
+  ];
   const orderId = hash.computePoseidonHashOnElements(inputs);
   return BigInt(orderId);
 }
 
-export const mineStarknetBlocks = async (blocks : number) => {
+export const mineStarknetBlocks = async (blocks: number) => {
   try {
     for (let i = 0; i < blocks; i++) {
       await axios.post(STARKNET_DEVNET_URL, {
-        "jsonrpc": "2.0",
-        "id": "1",
-        "method": "devnet_createBlock"
+        jsonrpc: "2.0",
+        id: "1",
+        method: "devnet_createBlock",
       });
     }
   } catch (error) {
     console.log("Mining failed : ", error);
   }
-}
+};

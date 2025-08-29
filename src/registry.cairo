@@ -1,5 +1,4 @@
 use core::num::traits::Zero;
-use starknet::class_hash::ClassHash;
 use starknet::contract_address::ContractAddress;
 use starknet::storage::{
     Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
@@ -15,11 +14,9 @@ mod registry {
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use starknet::event::EventEmitter;
-    use starknet::get_contract_address;
     use starknet::syscalls::deploy_syscall;
-    use crate::interface::{
-        IRegistry, IUniqueDepositAddressDispatcher, IUniqueDepositAddressDispatcherTrait,
-    };
+    use starknet::{ClassHash, get_contract_address};
+    use crate::interface::IRegistry;
     use super::*;
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
@@ -35,7 +32,7 @@ mod registry {
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
         htlcs: Map<ContractAddress, ContractAddress>, // token -> htlc mapping
-        impl_uda: ContractAddress // class hash as address
+        uda_class_hash: ClassHash // class hash
     }
 
     #[event]
@@ -45,7 +42,6 @@ mod registry {
         OwnableEvent: OwnableComponent::Event,
         HTLCAdded: HTLCAdded,
         UDACreated: UDACreated,
-        UDAImplUpdated: UDAImplUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -66,12 +62,6 @@ mod registry {
         token: ContractAddress,
     }
 
-    #[derive(Drop, starknet::Event)]
-    struct UDAImplUpdated {
-        #[key]
-        impl_address: ContractAddress,
-    }
-
     pub mod Error {
         pub const INVALID_ADDRESS_PARAMETERS: felt252 = 'Invalid address parameters';
         pub const ZERO_TIMELOCK: felt252 = 'Zero timelock';
@@ -83,8 +73,9 @@ mod registry {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, owner: ContractAddress) {
+    fn constructor(ref self: ContractState, owner: ContractAddress, classHash: ClassHash) {
         self.ownable.initializer(owner);
+        self.uda_class_hash.write(classHash);
     }
 
     #[abi(embed_v0)]
@@ -100,21 +91,26 @@ mod registry {
             destination_data: Span<felt252>,
         ) -> ContractAddress {
             self._validate_params(refund_address, redeemer, timelock, amount, token);
+            let htlc_address = self.htlcs.read(token);
 
-            // Check if sufficient funds are deposited at the predicted UDA address
             let predicted_address = self
-                ._compute_address(
-                    refund_address, redeemer, timelock, secret_hash, amount, destination_data,
+                .get_address(
+                    token,
+                    refund_address,
+                    redeemer,
+                    timelock,
+                    secret_hash,
+                    amount,
+                    destination_data,
                 );
 
             let erc20 = IERC20Dispatcher { contract_address: token };
             let balance = erc20.balance_of(predicted_address);
             assert(balance >= amount, Error::INSUFFICIENT_FUNDS);
 
-            // Deploy UDA if not already deployed
             let deployed_address = self
-                ._deploy_uda_if_needed(
-                    token,
+                ._deploy_uda(
+                    htlc_address,
                     refund_address,
                     redeemer,
                     timelock,
@@ -139,10 +135,17 @@ mod registry {
             destination_data: Span<felt252>,
         ) -> ContractAddress {
             self._validate_params(refund_address, redeemer, timelock, amount, token);
+            let htlc_address = self.htlcs.read(token);
 
             self
                 ._compute_address(
-                    refund_address, redeemer, timelock, secret_hash, amount, destination_data,
+                    htlc_address,
+                    refund_address,
+                    redeemer,
+                    timelock,
+                    secret_hash,
+                    amount,
+                    destination_data,
                 )
         }
 
@@ -158,20 +161,8 @@ mod registry {
             self.emit(HTLCAdded { htlc, token });
         }
 
-        fn set_impl_uda(ref self: ContractState, impl_address: ContractAddress) {
-            self.ownable.assert_only_owner();
-            self._validate_contract_address(impl_address);
-
-            self.impl_uda.write(impl_address);
-            self.emit(UDAImplUpdated { impl_address });
-        }
-
         fn get_htlc_for_token(self: @ContractState, token: ContractAddress) -> ContractAddress {
             self.htlcs.read(token)
-        }
-
-        fn get_impl_uda(self: @ContractState) -> ContractAddress {
-            self.impl_uda.read()
         }
 
         fn get_owner(self: @ContractState) -> ContractAddress {
@@ -200,12 +191,17 @@ mod registry {
             assert(amount > 0, Error::ZERO_AMOUNT);
         }
 
+        fn _validate_class_hash(self: @ContractState, address: ClassHash) {
+            assert(!address.is_zero(), Error::INVALID_ADDRESS);
+        }
+
         fn _validate_contract_address(self: @ContractState, address: ContractAddress) {
             assert(!address.is_zero(), Error::INVALID_ADDRESS);
         }
 
         fn _compute_address(
             self: @ContractState,
+            htlc_address: ContractAddress,
             refund_address: ContractAddress,
             redeemer: ContractAddress,
             timelock: u128,
@@ -218,9 +214,19 @@ mod registry {
                     refund_address, redeemer, timelock, secret_hash, amount, destination_data,
                 );
 
-            self._compute_address_from_salt(refund_address, salt, self.impl_uda.read())
+            self
+                ._compute_address_from_salt(
+                    htlc_address,
+                    refund_address,
+                    redeemer,
+                    timelock,
+                    secret_hash,
+                    amount,
+                    destination_data,
+                    salt,
+                    self.uda_class_hash.read(),
+                )
         }
-
         fn _compute_salt(
             self: @ContractState,
             refund_address: ContractAddress,
@@ -253,21 +259,52 @@ mod registry {
 
         fn _compute_address_from_salt(
             self: @ContractState,
-            owner: ContractAddress,
+            htlc_address: ContractAddress,
+            refund_address: ContractAddress,
+            redeemer: ContractAddress,
+            timelock: u128,
+            secret_hash: [u32; 8],
+            amount: u256,
+            destination_data: Span<felt252>,
             salt: felt252,
-            class_hash: ContractAddress,
+            class_hash: ClassHash,
         ) -> ContractAddress {
             let mut constructor_calldata: Array<felt252> = ArrayTrait::new();
-            constructor_calldata.append(owner.into());
 
-            let constructor_calldata_hash = PedersenTrait::new(0)
-                .update(*constructor_calldata.span().at(0))
-                .update(1)
+            constructor_calldata.append(htlc_address.into());
+            constructor_calldata.append(refund_address.into());
+            constructor_calldata.append(redeemer.into());
+            constructor_calldata.append(timelock.into());
+
+            // Add secret_hash array [u32; 8]
+            for hash_part in secret_hash.span() {
+                let hash_int: u32 = *hash_part;
+                constructor_calldata.append(hash_int.into());
+            }
+
+            // Add amount u256 (low, high)
+            constructor_calldata.append(amount.low.into());
+            constructor_calldata.append(amount.high.into());
+
+            // Add destination_data as Span<felt252>
+            constructor_calldata.append(destination_data.len().into());
+            for data in destination_data {
+                constructor_calldata.append(*data);
+            }
+
+            // Hash the constructor calldata
+            let mut constructor_hasher = PedersenTrait::new(0);
+            for param in constructor_calldata.span() {
+                constructor_hasher = constructor_hasher.update(*param);
+            }
+            let constructor_calldata_hash = constructor_hasher
+                .update(constructor_calldata.len().into())
                 .finalize();
 
+            // Compute the contract address
             let contract_address_hash = PedersenTrait::new(0)
                 .update(CONTRACT_ADDRESS_PREFIX)
-                .update(get_contract_address().into()) // deployer address
+                .update(get_contract_address().into()) // deployer address (registry)
                 .update(salt)
                 .update(class_hash.into())
                 .update(constructor_calldata_hash)
@@ -277,9 +314,9 @@ mod registry {
             contract_address_hash.try_into().unwrap()
         }
 
-        fn _deploy_uda_if_needed(
+        fn _deploy_uda(
             ref self: ContractState,
-            token: ContractAddress,
+            htlc_address: ContractAddress,
             refund_address: ContractAddress,
             redeemer: ContractAddress,
             timelock: u128,
@@ -292,37 +329,43 @@ mod registry {
                     refund_address, redeemer, timelock, secret_hash, amount, destination_data,
                 );
 
-            // Convert ContractAddress to ClassHash
-            let class_hash: ClassHash = {
-                let addr_felt: felt252 = self.impl_uda.read().into();
-                addr_felt.try_into().unwrap()
-            };
-
-            let predicted_address = self
-                ._compute_address_from_salt(refund_address, salt, self.impl_uda.read());
-
-            // if contract already exists, this might fail
             let mut constructor_calldata: Array<felt252> = ArrayTrait::new();
-            constructor_calldata.append(refund_address.try_into().unwrap());
 
-            match deploy_syscall(class_hash, salt, constructor_calldata.span(), false) {
-                Result::Ok((
-                    deployed_address, _,
-                )) => {
-                    // deploy done...
-                    let uda = IUniqueDepositAddressDispatcher {
-                        contract_address: deployed_address,
-                    };
-                    uda
-                        .initialize(
-                            token, redeemer, timelock, secret_hash, amount, destination_data,
-                        );
-                    deployed_address
-                },
-                Result::Err(_) => {
-                    // Returning the address if it already exists or fails
-                    predicted_address
-                },
+            // UDA constructor parameters in correct order:
+            // htlc_address: ContractAddress,
+            // refund_address: ContractAddress,
+            // redeemer: ContractAddress,
+            // timelock: u128,
+            // secret_hash: [u32; 8],
+            // amount: u256,
+            // destination_data: Span<felt252>,
+
+            constructor_calldata.append(htlc_address.into());
+            constructor_calldata.append(refund_address.into());
+            constructor_calldata.append(redeemer.into());
+            constructor_calldata.append(timelock.into());
+
+            // Add secret_hash array [u32; 8]
+            for hash_part in secret_hash.span() {
+                let hash_int: u32 = *hash_part;
+                constructor_calldata.append(hash_int.into());
+            }
+
+            // Add amount u256 (low, high)
+            constructor_calldata.append(amount.low.into());
+            constructor_calldata.append(amount.high.into());
+
+            // Add destination_data as Span<felt252>
+            constructor_calldata.append(destination_data.len().into());
+            for data in destination_data {
+                constructor_calldata.append(*data);
+            }
+
+            match deploy_syscall(
+                self.uda_class_hash.read(), salt, constructor_calldata.span(), false,
+            ) {
+                Result::Ok((deployed_address, _)) => { deployed_address },
+                Result::Err(err) => { panic!("UDA deployment failed: {:?}", err); },
             }
         }
     }

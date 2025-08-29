@@ -10,45 +10,42 @@ mod UniqueDepositAddress {
     #[storage]
     struct Storage {
         refund_address: ContractAddress,
-        initialized: bool,
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, refund_address: ContractAddress) {
+    fn constructor(
+        ref self: ContractState,
+        htlc_address: ContractAddress,
+        refund_address: ContractAddress,
+        redeemer: ContractAddress,
+        timelock: u128,
+        secret_hash: [u32; 8],
+        amount: u256,
+        destination_data: Span<felt252>,
+    ) {
         self.refund_address.write(refund_address);
-        self.initialized.write(false);
+
+        let htlc = IHTLCDispatcher { contract_address: htlc_address };
+        let token = htlc.token();
+
+        // Approve
+        let erc20 = IERC20Dispatcher { contract_address: token };
+        erc20.approve(htlc_address, amount);
+
+        let dest_array: Array<felt252> = destination_data.into();
+        htlc
+            .initiate_on_behalf_with_destination_data(
+                refund_address, // initiator
+                redeemer, // redeemer
+                timelock, // timelock
+                amount, // amount
+                secret_hash, // secret_hash
+                dest_array // destination_data
+            );
     }
 
     #[abi(embed_v0)]
     impl UniqueDepositAddressImpl of IUniqueDepositAddress<ContractState> {
-        fn initialize(
-            ref self: ContractState,
-            htlc_address: ContractAddress,
-            redeemer: ContractAddress,
-            timelock: u128,
-            secret_hash: [u32; 8],
-            amount: u256,
-            destination_data: Span<felt252>,
-        ) {
-            assert(!self.initialized.read(), 'UDA: already initialized');
-            let refund_addr = self.refund_address.read();
-
-            let htlc = IHTLCDispatcher { contract_address: htlc_address };
-            let token = htlc.token();
-
-            // Approve
-            let erc20 = IERC20Dispatcher { contract_address: token };
-            erc20.approve(htlc_address, amount);
-
-            let dest_array: Array<felt252> = destination_data.into();
-            htlc
-                .initiate_on_behalf_with_destination_data(
-                    refund_addr, redeemer, timelock, amount, secret_hash, dest_array,
-                );
-
-            self.initialized.write(true);
-        }
-
         fn recover_token(ref self: ContractState, token: ContractAddress) {
             let refund_addr = self.refund_address.read();
 
@@ -60,3 +57,4 @@ mod UniqueDepositAddress {
         }
     }
 }
+

@@ -36,7 +36,11 @@ async function main() {
     process.exit(1);
   }
 
-  const account = new Account(provider, accountAddress, privateKey,"1","0x3");
+  const account = new Account({
+    provider,
+    address: accountAddress,
+    signer: privateKey,
+  });
   console.log("Account connected:", accountAddress);
 
   try {
@@ -51,11 +55,11 @@ async function main() {
       salt: stark.randomAddress(),
     });
 
-    const deployedContract = new Contract(
-      sierraCode.abi,
-      deployResponse.deploy.contract_address,
-      provider
-    );
+    const deployedContract = new Contract({
+      abi: sierraCode.abi,
+      address: deployResponse.deploy.contract_address,
+      providerOrAccount: account,
+    });
 
     console.log("✅ Multicall Contract deployed successfully!");
     console.log("Contract address:", deployedContract.address);

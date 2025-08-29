@@ -74,16 +74,6 @@ pub trait IStructHash<T> {
 
 #[starknet::interface]
 pub trait IUniqueDepositAddress<TContractState> {
-    fn initialize(
-        ref self: TContractState,
-        htlc_address: ContractAddress,
-        redeemer: ContractAddress,
-        timelock: u128,
-        secret_hash: [u32; 8],
-        amount: u256,
-        destination_data: Span<felt252>,
-    );
-
     fn recover_token(ref self: TContractState, token: ContractAddress);
 }
 
@@ -112,9 +102,6 @@ pub trait IRegistry<TContractState> {
     ) -> ContractAddress;
 
     fn add_htlc(ref self: TContractState, htlc: ContractAddress, token: ContractAddress);
-    fn set_impl_uda(ref self: TContractState, impl_address: ContractAddress);
-
     fn get_htlc_for_token(self: @TContractState, token: ContractAddress) -> ContractAddress;
-    fn get_impl_uda(self: @TContractState) -> ContractAddress;
     fn get_owner(self: @TContractState) -> ContractAddress;
 }

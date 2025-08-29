@@ -6,6 +6,7 @@
     "deploy:multicall": "ts-node scripts/multicall.ts",
     "start:hardhat": "npx hardhat node",
     "start:devnet": "starknet-devnet --seed 1",
+    "format": "prettier --write \"tests/**/*.{ts,tsx,js,jsx,json}\"",
     "test": "jest"
   },
   "dependencies": {
@@ -24,7 +25,7 @@
     "global": "^4.4.0",
     "hardhat": "^2.20.1",
     "js-sha256": "^0.11.0",
-    "starknet": "7.1.0",
+    "starknet": "8.5.2",
     "tiny-secp256k1": "^2.2.3",
     "ts-node": "^10.9.2",
     "tslib": "^2.7.0",
@@ -42,6 +43,7 @@
     "@nomicfoundation/hardhat-verify": "^2.0.8",
     "@nomicfoundation/ignition-core": "^0.15.5",
     "@types/jest": "^29.5.14",
+    "@types/minimatch": "5.1.2",
     "@types/node": "^22.10.7",
     "chai": "^4.2.0",
     "hardhat-gas-reporter": "^1.0.8",
