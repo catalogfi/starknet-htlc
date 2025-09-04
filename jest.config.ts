@@ -8,6 +8,8 @@ const config: import("jest").Config = {
   testMatch: ["**/tests/**/*.test.ts"],
   snapshotSerializers: ["<rootDir>/tests/bigintSerializer.ts"],
   testTimeout: 300000,
+  // For sequential execution
+  maxWorkers: 1,
 };
 
 export default config;

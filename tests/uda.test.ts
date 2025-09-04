@@ -9,22 +9,18 @@ import {
 import { generateOrderId, getCompiledCode, hexToU32Array } from "./utils";
 import { parseEther, sha256 } from "ethers";
 import { randomBytes } from "crypto";
-import {
-  ALICE_ADDRESS,
-  ALICE_PRIVATE_KEY,
-  STARKNET_DEVNET_URL,
-} from "./config";
+import { STARKNET_DEVNET_URL } from "./config";
 
 describe("UDA Address Prediction Test", () => {
   const starknetProvider = new RpcProvider({
     nodeUrl: STARKNET_DEVNET_URL,
   });
 
-  const alice = new Account({
-    provider: starknetProvider,
-    address: ALICE_ADDRESS,
-    signer: ALICE_PRIVATE_KEY,
-  });
+  const alice = new Account(
+    starknetProvider,
+    "0x06a41708a2379d0328ff6797007a1e4d85ca934d69fa64c4e465d3a99a167fb5",
+    "0x00000000000000000000000000000000dc76d257c6cfd7833e92380910a81f93"
+  );
 
   const STARK =
     "0x4718F5A0FC34CC1AF16A1CDEE98FFB20C31F5CD61D6AB07201858F4287C938D";
@@ -59,34 +55,34 @@ describe("UDA Address Prediction Test", () => {
         salt: sn.randomAddress(),
       });
 
-      starknetHTLC = new Contract({
-        abi: sierraCode.abi,
-        address: deployResponse.deploy.contract_address,
-        providerOrAccount: alice,
-      });
+      starknetHTLC = new Contract(
+        sierraCode.abi,
+        deployResponse.deploy.contract_address,
+        alice
+      );
     } catch (error) {
       console.error("❌ Failed to deploy HTLC:", error);
       throw error;
     }
   };
 
-  // const declareUDA = async (): Promise<string> => {
-  //   try {
-  //     const { sierraCode, casmCode } = await getCompiledCode(
-  //       "starknet_htlc_UniqueDepositAddress"
-  //     );
+  const declareUDA = async (): Promise<string> => {
+    try {
+      const { sierraCode, casmCode } = await getCompiledCode(
+        "starknet_htlc_UniqueDepositAddress"
+      );
 
-  //     const declareResponse = await alice.declare({
-  //       contract: sierraCode,
-  //       casm: casmCode,
-  //     });
+      const declareResponse = await alice.declare({
+        contract: sierraCode,
+        casm: casmCode,
+      });
 
-  //     return declareResponse.class_hash;
-  //   } catch (error) {
-  //     console.error("❌ Failed to declare UDA:", error);
-  //     throw error;
-  //   }
-  // };
+      return declareResponse.class_hash;
+    } catch (error) {
+      console.error("❌ Failed to declare UDA:", error);
+      throw error;
+    }
+  };
 
   const deployRegistry = async (): Promise<void> => {
     try {
@@ -107,11 +103,11 @@ describe("UDA Address Prediction Test", () => {
         salt: sn.randomAddress(),
       });
 
-      registry = new Contract({
-        abi: sierraCode.abi,
-        address: deployResponse.deploy.contract_address,
-        providerOrAccount: alice,
-      });
+      registry = new Contract(
+        sierraCode.abi,
+        deployResponse.deploy.contract_address,
+        alice
+      );
     } catch (error) {
       console.error("❌ Failed to deploy Registry:", error);
       throw error;
@@ -147,11 +143,7 @@ describe("UDA Address Prediction Test", () => {
 
       // Initialize STARK contract
       const contractData = await starknetProvider.getClassAt(STARK);
-      stark = new Contract({
-        abi: contractData.abi,
-        address: STARK,
-        providerOrAccount: starknetProvider,
-      });
+      stark = new Contract(contractData.abi, STARK, starknetProvider);
 
       console.log("📦 Deploying contracts...");
 
@@ -159,8 +151,7 @@ describe("UDA Address Prediction Test", () => {
       console.log("✅ HTLC deployed at:", starknetHTLC.address);
       await new Promise((resolve) => setTimeout(resolve, 10000));
 
-      udaClassHash =
-        "0x0012ab1805f94af93a56cc9ff9bd7341865a0ef265764f081295686c74003f3d";
+      udaClassHash = await declareUDA();
       console.log("✅ UDA class hash:", udaClassHash);
       await new Promise((resolve) => setTimeout(resolve, 10000));
 

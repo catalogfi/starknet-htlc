@@ -352,7 +352,7 @@ pub mod HTLC {
         fn instant_refund(ref self: ContractState, order_id: felt252, signature: Array<felt252>) {
             let order = self.orders.read(order_id);
             assert!(order.redeemer.is_non_zero(), "HTLC: order not initiated");
-            assert!(!order.fulfilled_at.is_zero(), "HTLC: order fulfilled");
+            assert!(order.fulfilled_at.is_zero(), "HTLC: order fulfilled");
 
             let caller = get_caller_address();
 
