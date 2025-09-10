@@ -175,9 +175,10 @@ describe("UDA Address Prediction Test", () => {
   describe("- UDA Address Prediction -", () => {
     it("Should predict same address for same parameters", async () => {
       const destinationData: number[] = [];
+      const htlc_address = await registry.get_htlc_for_token(STARK);
 
       const address1 = await registry.get_address(
-        STARK,
+        htlc_address,
         alice.address,
         RECEIVER_ADDRESS,
         TIMELOCK,
@@ -187,7 +188,7 @@ describe("UDA Address Prediction Test", () => {
       );
 
       const address2 = await registry.get_address(
-        STARK,
+        htlc_address,
         alice.address,
         RECEIVER_ADDRESS,
         TIMELOCK,
@@ -207,9 +208,10 @@ describe("UDA Address Prediction Test", () => {
     it("Should predict different addresses for different parameters", async () => {
       const destinationData1: number[] = [];
       const destinationData2: number[] = [1, 2, 3];
+      const htlc_address = await registry.get_htlc_for_token(STARK);
 
       const address1 = await registry.get_address(
-        STARK,
+        htlc_address,
         alice.address,
         RECEIVER_ADDRESS,
         TIMELOCK,
@@ -219,7 +221,7 @@ describe("UDA Address Prediction Test", () => {
       );
 
       const address2 = await registry.get_address(
-        STARK,
+        htlc_address,
         alice.address,
         RECEIVER_ADDRESS,
         TIMELOCK,
@@ -241,9 +243,10 @@ describe("UDA Address Prediction Test", () => {
   describe("- UDA Creation Test -", () => {
     it("Should match prediction with actual deployment", async () => {
       const destinationData: number[] = [];
+      const htlc_address = await registry.get_htlc_for_token(STARK);
 
       const predictedAddress = await registry.get_address(
-        STARK,
+        htlc_address,
         alice.address,
         RECEIVER_ADDRESS,
         TIMELOCK,
@@ -329,6 +332,7 @@ describe("UDA Address Prediction Test", () => {
   describe("- Real World Scenario Test -", () => {
     it("Should test complete flow with order ID generation", async () => {
       const destinationData: number[] = [10, 20, 30];
+      const htlc_address = await registry.get_htlc_for_token(STARK);
 
       // Verify registry has correct HTLC
       const registryHTLC = await registry.get_htlc_for_token(STARK);
@@ -338,7 +342,7 @@ describe("UDA Address Prediction Test", () => {
 
       // Test address prediction
       const predictedUDA1 = await registry.get_address(
-        STARK,
+        htlc_address,
         alice.address,
         RECEIVER_ADDRESS,
         TIMELOCK,
@@ -348,7 +352,7 @@ describe("UDA Address Prediction Test", () => {
       );
 
       const predictedUDA2 = await registry.get_address(
-        STARK,
+        htlc_address,
         alice.address,
         RECEIVER_ADDRESS,
         TIMELOCK,
@@ -369,7 +373,7 @@ describe("UDA Address Prediction Test", () => {
         RECEIVER_ADDRESS,
         TIMELOCK,
         AMOUNT,
-        starknetHTLC.address
+        htlc_address // can also use this -> starknethtlc.address
       );
 
       console.log("📋 Generated order ID:", orderId);

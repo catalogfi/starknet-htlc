@@ -92,7 +92,7 @@ pub trait IRegistry<TContractState> {
 
     fn get_address(
         self: @TContractState,
-        token: ContractAddress,
+        htlc_address: ContractAddress,
         refund_address: ContractAddress,
         redeemer: ContractAddress,
         timelock: u128,
@@ -101,7 +101,7 @@ pub trait IRegistry<TContractState> {
         destination_data: Span<felt252>,
     ) -> ContractAddress;
 
-    fn add_htlc(ref self: TContractState, htlc: ContractAddress, token: ContractAddress);
+    fn add_htlc(ref self: TContractState, htlc_address: ContractAddress, token: ContractAddress);
     fn get_htlc_for_token(self: @TContractState, token: ContractAddress) -> ContractAddress;
     fn get_owner(self: @TContractState) -> ContractAddress;
 }

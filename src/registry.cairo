@@ -47,7 +47,7 @@ mod registry {
     #[derive(Drop, starknet::Event)]
     struct HTLCAdded {
         #[key]
-        htlc: ContractAddress,
+        htlc_address: ContractAddress,
         #[key]
         token: ContractAddress,
     }
@@ -66,20 +66,22 @@ mod registry {
         pub const INVALID_ADDRESS_PARAMETERS: felt252 = 'Invalid address parameters';
         pub const ZERO_TIMELOCK: felt252 = 'Zero timelock';
         pub const ZERO_AMOUNT: felt252 = 'Zero amount';
-        pub const HTLC_ALREADY_EXISTS: felt252 = 'HTLC already exists for token';
         pub const INVALID_ADDRESS: felt252 = 'Invalid address';
         pub const INSUFFICIENT_FUNDS: felt252 = 'Insufficient funds deposited';
-        pub const NO_HTLC_FOR_TOKEN: felt252 = 'No HTLC found for this token';
+        pub const NO_HTLC_OR_TOKEN_FOR_ADDRESS: felt252 = 'No HTLC or Token found';
     }
 
     #[constructor]
     fn constructor(ref self: ContractState, owner: ContractAddress, classHash: ClassHash) {
+        self._validate_class_hash(classHash);
+
         self.ownable.initializer(owner);
         self.uda_class_hash.write(classHash);
     }
 
     #[abi(embed_v0)]
     impl RegistryImpl of IRegistry<ContractState> {
+        // Need token for performing balance check...
         fn create_swap_address(
             ref self: ContractState,
             token: ContractAddress,
@@ -95,7 +97,7 @@ mod registry {
 
             let predicted_address = self
                 .get_address(
-                    token,
+                    htlc_address,
                     refund_address,
                     redeemer,
                     timelock,
@@ -117,6 +119,7 @@ mod registry {
                     secret_hash,
                     amount,
                     destination_data,
+                    predicted_address,
                 );
 
             self.emit(UDACreated { address_uda: deployed_address, refund_address, token });
@@ -126,7 +129,7 @@ mod registry {
 
         fn get_address(
             self: @ContractState,
-            token: ContractAddress,
+            htlc_address: ContractAddress,
             refund_address: ContractAddress,
             redeemer: ContractAddress,
             timelock: u128,
@@ -134,8 +137,7 @@ mod registry {
             amount: u256,
             destination_data: Span<felt252>,
         ) -> ContractAddress {
-            self._validate_params(refund_address, redeemer, timelock, amount, token);
-            let htlc_address = self.htlcs.read(token);
+            self._validate_params(refund_address, redeemer, timelock, amount, htlc_address);
 
             self
                 ._compute_address(
@@ -149,16 +151,14 @@ mod registry {
                 )
         }
 
-        fn add_htlc(ref self: ContractState, htlc: ContractAddress, token: ContractAddress) {
+        fn add_htlc(
+            ref self: ContractState, htlc_address: ContractAddress, token: ContractAddress,
+        ) {
             self.ownable.assert_only_owner();
-            self._validate_contract_address(htlc);
+            self._validate_contract_address(htlc_address);
 
-            // Check if HTLC already exists for this token
-            let existing_htlc = self.htlcs.read(token);
-            assert(existing_htlc.is_zero(), Error::HTLC_ALREADY_EXISTS);
-
-            self.htlcs.write(token, htlc);
-            self.emit(HTLCAdded { htlc, token });
+            self.htlcs.write(token, htlc_address);
+            self.emit(HTLCAdded { htlc_address, token });
         }
 
         fn get_htlc_for_token(self: @ContractState, token: ContractAddress) -> ContractAddress {
@@ -178,11 +178,9 @@ mod registry {
             redeemer: ContractAddress,
             timelock: u128,
             amount: u256,
-            token: ContractAddress,
+            address: ContractAddress,
         ) {
-            let htlc = self.htlcs.read(token);
-            assert(!htlc.is_zero(), Error::NO_HTLC_FOR_TOKEN);
-
+            assert(!address.is_zero(), Error::NO_HTLC_OR_TOKEN_FOR_ADDRESS);
             assert(
                 !redeemer.is_zero() && !refund_address.is_zero() && redeemer != refund_address,
                 Error::INVALID_ADDRESS_PARAMETERS,
@@ -191,11 +189,11 @@ mod registry {
             assert(amount > 0, Error::ZERO_AMOUNT);
         }
 
-        fn _validate_class_hash(self: @ContractState, address: ClassHash) {
+        fn _validate_contract_address(self: @ContractState, address: ContractAddress) {
             assert(!address.is_zero(), Error::INVALID_ADDRESS);
         }
 
-        fn _validate_contract_address(self: @ContractState, address: ContractAddress) {
+        fn _validate_class_hash(self: @ContractState, address: ClassHash) {
             assert(!address.is_zero(), Error::INVALID_ADDRESS);
         }
 
@@ -323,6 +321,7 @@ mod registry {
             secret_hash: [u32; 8],
             amount: u256,
             destination_data: Span<felt252>,
+            _predicted_address: ContractAddress,
         ) -> ContractAddress {
             let salt = self
                 ._compute_salt(
@@ -365,7 +364,10 @@ mod registry {
                 self.uda_class_hash.read(), salt, constructor_calldata.span(), false,
             ) {
                 Result::Ok((deployed_address, _)) => { deployed_address },
-                Result::Err(err) => { panic!("UDA deployment failed: {:?}", err); },
+                Result::Err(_err) => {
+                    // Contract already exists
+                    _predicted_address
+                },
             }
         }
     }
