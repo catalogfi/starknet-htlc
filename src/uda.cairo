@@ -25,15 +25,14 @@ mod UniqueDepositAddress {
     ) {
         self.refund_address.write(refund_address);
 
-        let htlc = IHTLCDispatcher { contract_address: htlc_address };
-        let token = htlc.token();
+        let token = IHTLCDispatcher { contract_address: htlc_address }.token();
 
         // Approve
         let erc20 = IERC20Dispatcher { contract_address: token };
         erc20.approve(htlc_address, amount);
 
         let dest_array: Array<felt252> = destination_data.into();
-        htlc
+        IHTLCDispatcher { contract_address: htlc_address }
             .initiate_on_behalf_with_destination_data(
                 refund_address, // initiator
                 redeemer, // redeemer

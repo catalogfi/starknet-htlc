@@ -81,7 +81,7 @@ pub trait IUniqueDepositAddress<TContractState> {
 pub trait IRegistry<TContractState> {
     fn create_swap_address(
         ref self: TContractState,
-        token: ContractAddress,
+        htlc_address: ContractAddress,
         refund_address: ContractAddress,
         redeemer: ContractAddress,
         timelock: u128,

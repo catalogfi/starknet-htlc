@@ -4,9 +4,11 @@ use starknet::storage::{
     Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
     StoragePointerWriteAccess,
 };
-
+use crate::interface::{IHTLCDispatcher, IHTLCDispatcherTrait, IUniqueDepositAddress};
 #[starknet::contract]
 mod registry {
+    use super::IHTLCDispatcher;
+use crate::htlc;
     use core::array::ArrayTrait;
     use core::hash::HashStateTrait;
     use core::pedersen::PedersenTrait;
@@ -15,7 +17,7 @@ mod registry {
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use starknet::event::EventEmitter;
     use starknet::syscalls::deploy_syscall;
-    use starknet::{ClassHash, get_contract_address};
+    use starknet::{ClassHash, get_contract_address, ContractAddress, get_caller_address};
     use crate::interface::IRegistry;
     use super::*;
 
@@ -68,7 +70,8 @@ mod registry {
         pub const ZERO_AMOUNT: felt252 = 'Zero amount';
         pub const INVALID_ADDRESS: felt252 = 'Invalid address';
         pub const INSUFFICIENT_FUNDS: felt252 = 'Insufficient funds deposited';
-        pub const NO_HTLC_OR_TOKEN_FOR_ADDRESS: felt252 = 'No HTLC or Token found';
+        pub const INVALID_HTLC_ADDRESS: felt252 = 'Invalid HTLC address';
+        pub const TOKEN_NOT_FOUND: felt252 = 'Token not found';
     }
 
     #[constructor]
@@ -81,10 +84,9 @@ mod registry {
 
     #[abi(embed_v0)]
     impl RegistryImpl of IRegistry<ContractState> {
-        // Need token for performing balance check...
         fn create_swap_address(
             ref self: ContractState,
-            token: ContractAddress,
+            htlc_address: ContractAddress,
             refund_address: ContractAddress,
             redeemer: ContractAddress,
             timelock: u128,
@@ -92,8 +94,9 @@ mod registry {
             amount: u256,
             destination_data: Span<felt252>,
         ) -> ContractAddress {
-            self._validate_params(refund_address, redeemer, timelock, amount, token);
-            let htlc_address = self.htlcs.read(token);
+            self._validate_params(refund_address, redeemer, timelock, amount, htlc_address);
+
+            let token_address = IHTLCDispatcher { contract_address: htlc_address }.token();
 
             let predicted_address = self
                 .get_address(
@@ -106,7 +109,7 @@ mod registry {
                     destination_data,
                 );
 
-            let erc20 = IERC20Dispatcher { contract_address: token };
+            let erc20 = IERC20Dispatcher { contract_address: token_address };
             let balance = erc20.balance_of(predicted_address);
             assert(balance >= amount, Error::INSUFFICIENT_FUNDS);
 
@@ -122,7 +125,7 @@ mod registry {
                     predicted_address,
                 );
 
-            self.emit(UDACreated { address_uda: deployed_address, refund_address, token });
+            self.emit(UDACreated { address_uda: deployed_address, refund_address, token: token_address  });
 
             deployed_address
         }
@@ -178,9 +181,13 @@ mod registry {
             redeemer: ContractAddress,
             timelock: u128,
             amount: u256,
-            address: ContractAddress,
+            htlc_address: ContractAddress,
         ) {
-            assert(!address.is_zero(), Error::NO_HTLC_OR_TOKEN_FOR_ADDRESS);
+            assert( get_caller_address() != redeemer, Error::INVALID_ADDRESS_PARAMETERS);
+            assert(!htlc_address.is_zero(), Error::INVALID_HTLC_ADDRESS);
+            let token = IHTLCDispatcher { contract_address: htlc_address }.token();
+            assert(htlc_address == self.htlcs.read(token), Error::INVALID_HTLC_ADDRESS);
+
             assert(
                 !redeemer.is_zero() && !refund_address.is_zero() && redeemer != refund_address,
                 Error::INVALID_ADDRESS_PARAMETERS,
