@@ -36,7 +36,7 @@ async function main() {
     process.exit(1);
   }
 
-  const account = new Account(provider, accountAddress, privateKey,"1","0x3");
+  const account = new Account(provider, accountAddress, privateKey);
   console.log("Account connected:", accountAddress);
 
   try {
@@ -54,7 +54,7 @@ async function main() {
     const deployedContract = new Contract(
       sierraCode.abi,
       deployResponse.deploy.contract_address,
-      provider
+      account
     );
 
     console.log("✅ Multicall Contract deployed successfully!");

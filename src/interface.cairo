@@ -18,6 +18,15 @@ pub trait IHTLC<TContractState> {
         secret_hash: [u32; 8],
     );
 
+    fn initiate_with_destination_data(
+        ref self: TContractState,
+        redeemer: ContractAddress,
+        timelock: u128,
+        amount: u256,
+        secret_hash: [u32; 8],
+        destination_data: Array<felt252>,
+    );
+
     fn initiate_on_behalf(
         ref self: TContractState,
         initiator: ContractAddress,
@@ -60,4 +69,39 @@ pub trait IMessageHash<T> {
 
 pub trait IStructHash<T> {
     fn get_struct_hash(self: @T) -> felt252;
+}
+
+
+#[starknet::interface]
+pub trait IUniqueDepositAddress<TContractState> {
+    fn recover_token(ref self: TContractState, token: ContractAddress);
+}
+
+#[starknet::interface]
+pub trait IRegistry<TContractState> {
+    fn create_swap_address(
+        ref self: TContractState,
+        htlc_address: ContractAddress,
+        refund_address: ContractAddress,
+        redeemer: ContractAddress,
+        timelock: u128,
+        secret_hash: [u32; 8],
+        amount: u256,
+        destination_data: Span<felt252>,
+    ) -> ContractAddress;
+
+    fn get_address(
+        self: @TContractState,
+        htlc_address: ContractAddress,
+        refund_address: ContractAddress,
+        redeemer: ContractAddress,
+        timelock: u128,
+        secret_hash: [u32; 8],
+        amount: u256,
+        destination_data: Span<felt252>,
+    ) -> ContractAddress;
+
+    fn add_htlc(ref self: TContractState, htlc_address: ContractAddress, token: ContractAddress);
+    fn get_htlc_for_token(self: @TContractState, token: ContractAddress) -> ContractAddress;
+    fn get_owner(self: @TContractState) -> ContractAddress;
 }

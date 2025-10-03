@@ -38,7 +38,7 @@ async function main() {
     process.exit(1);
   }
 
-  const account = new Account(provider, accountAddress, privateKey,"1","0x3");
+  const account = new Account(provider, accountAddress, privateKey);
   console.log("Account connected:", accountAddress);
 
   try {
@@ -61,7 +61,7 @@ async function main() {
     const htlcContract = new Contract(
       sierraCode.abi,
       deployResponse.deploy.contract_address,
-      provider
+      account
     );
 
     console.log("✅ HTLC Contract deployed successfully!");
@@ -78,7 +78,7 @@ async function main() {
       timestamp: new Date().toISOString(),
     };
 
-    await writeDeploymentInfo("htlc",network, deployInfo);
+    await writeDeploymentInfo("htlc", network, deployInfo);
   } catch (error: any) {
     console.error("Deployment failed:", error.message);
     process.exit(1);
@@ -90,4 +90,4 @@ main()
   .catch((error) => {
     console.error(error);
     process.exit(1);
-});
+  });

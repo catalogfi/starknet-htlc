@@ -17,10 +17,7 @@ impl StructHashStarknetDomain of IStructHash<StarknetDomain> {
     fn get_struct_hash(self: @StarknetDomain) -> felt252 {
         poseidon_hash_span(
             array![
-                STARKNET_DOMAIN_TYPE_HASH,
-                *self.name,
-                *self.version,
-                *self.chain_id,
+                STARKNET_DOMAIN_TYPE_HASH, *self.name, *self.version, *self.chain_id,
                 *self.revision,
             ]
                 .span(),

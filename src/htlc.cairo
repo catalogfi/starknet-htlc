@@ -16,10 +16,10 @@ pub mod HTLC {
     use core::option::OptionTrait;
     use core::poseidon::PoseidonTrait;
     use core::sha256::compute_sha256_u32_array;
-    use core::starknet::event::EventEmitter;
     use core::traits::{Into, TryInto};
     use openzeppelin::account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use starknet::event::EventEmitter;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
@@ -29,7 +29,7 @@ pub mod HTLC {
         ContractAddress, SyscallResultTrait, get_block_info, get_caller_address,
         get_contract_address,
     };
-    use crate::interface::events::{Initiated, Redeemed, Refunded, InitiatedOnBehalf};
+    use crate::interface::events::{Initiated, InitiatedWithDestinationData, Redeemed, Refunded};
     use crate::interface::struct_hash::{
         Initiate, MessageHashInitiate, MessageHashInstantRefund, instantRefund,
     };
@@ -62,7 +62,7 @@ pub mod HTLC {
         Initiated: Initiated,
         Redeemed: Redeemed,
         Refunded: Refunded,
-        InitiatedOnBehalf: InitiatedOnBehalf,
+        InitiatedWithDestinationData: InitiatedWithDestinationData,
     }
 
     #[derive(Drop, Serde, starknet::Store, Debug)]
@@ -111,9 +111,47 @@ pub mod HTLC {
         ) {
             self.safe_params(redeemer, timelock, amount);
             let sender = get_caller_address();
+            let order_id = self._initiate(sender, sender, redeemer, timelock, amount, secret_hash);
+
             self
-                ._initiate(
-                    sender, sender, redeemer, timelock, amount, secret_hash,
+                .emit(
+                    Event::Initiated(
+                        Initiated { order_id, secret_hash: secret_hash, amount: amount },
+                    ),
+                );
+        }
+
+        /// @notice  Signers can create an order with order params.
+        /// @dev     Secret used to generate secret hash for initiation should be generated randomly
+        /// @dev     Calls _initiate internally.
+        ///          and SHA-256 hash should be used to support hashing methods on other non-EVM
+        ///          chains.
+        ///          Signers cannot generate orders with the same secret hash or override an
+        ///          existing order.
+        /// @param   redeemer  Contract address of the redeemer.
+        /// @param   timelock  Timelock period for the HTLC order.
+        /// @param   amount  Amount of tokens to trade.
+        /// @param   secret_hash  SHA-256 hash of the secret used for redemption.
+        /// @param   destination_data  Destination data for the HTLC order.
+        fn initiate_with_destination_data(
+            ref self: ContractState,
+            redeemer: ContractAddress,
+            timelock: u128,
+            amount: u256,
+            secret_hash: [u32; 8],
+            destination_data: Array<felt252>,
+        ) {
+            self.safe_params(redeemer, timelock, amount);
+            let sender = get_caller_address();
+            let order_id = self._initiate(sender, sender, redeemer, timelock, amount, secret_hash);
+
+            self
+                .emit(
+                    Event::InitiatedWithDestinationData(
+                        InitiatedWithDestinationData {
+                            order_id, secret_hash, amount, destination_data,
+                        },
+                    ),
                 );
         }
 
@@ -136,9 +174,16 @@ pub mod HTLC {
         ) {
             self.safe_params(redeemer, timelock, amount);
             let sender = get_caller_address();
+            assert!(sender != redeemer, "HTLC: sender == redeemer");
+
+            let order_id = self
+                ._initiate(sender, initiator, redeemer, timelock, amount, secret_hash);
+
             self
-                ._initiate(
-                    sender, initiator, redeemer, timelock, amount, secret_hash,
+                .emit(
+                    Event::Initiated(
+                        Initiated { order_id, secret_hash: secret_hash, amount: amount },
+                    ),
                 );
         }
 
@@ -151,7 +196,7 @@ pub mod HTLC {
         /// @param   timelock     Timelock period for the HTLC order.
         /// @param   amount       Amount of tokens to be locked.
         /// @param   secret_hash  SHA-256 hash of the secret used for redemption.
-        /// @param   destination_data 
+        /// @param   destination_data
         fn initiate_on_behalf_with_destination_data(
             ref self: ContractState,
             initiator: ContractAddress,
@@ -163,12 +208,19 @@ pub mod HTLC {
         ) {
             self.safe_params(redeemer, timelock, amount);
             let sender = get_caller_address();
-            let order_id = self
-                ._initiate(
-                    sender, initiator, redeemer, timelock, amount, secret_hash,
-                );
+            assert!(sender != redeemer, "HTLC: sender == redeemer");
 
-            self.emit(Event::InitiatedOnBehalf(InitiatedOnBehalf { order_id, secret_hash, amount, destination_data }));
+            let order_id = self
+                ._initiate(sender, initiator, redeemer, timelock, amount, secret_hash);
+
+            self
+                .emit(
+                    Event::InitiatedWithDestinationData(
+                        InitiatedWithDestinationData {
+                            order_id, secret_hash, amount, destination_data,
+                        },
+                    ),
+                );
         }
 
         /// @notice  Signers can create an order with order params and signature for a user.
@@ -209,10 +261,10 @@ pub mod HTLC {
             let is_valid_signature = is_valid == starknet::VALIDATED || is_valid == 1;
             assert!(is_valid_signature, "HTLC: invalid initiator signature");
 
-            self
-                ._initiate(
-                    initiator, initiator, redeemer, timelock, amount, secret_hash,
-                );
+            let order_id = self
+                ._initiate(initiator, initiator, redeemer, timelock, amount, secret_hash);
+
+            self.emit(Event::Initiated(Initiated { order_id, secret_hash, amount }));
         }
 
         /// @notice  Signers with the correct secret to an order's secret hash can redeem to claim
@@ -250,7 +302,9 @@ pub mod HTLC {
             );
 
             let block_info = get_block_info().unbox();
-            self.orders.write(order_id, Order { fulfilled_at: block_info.block_number.into(), ..order });
+            self
+                .orders
+                .write(order_id, Order { fulfilled_at: block_info.block_number.into(), ..order });
 
             self.token.read().transfer(order.redeemer, order.amount);
             self.emit(Event::Redeemed(Redeemed { order_id, secret_hash, secret }));
@@ -276,7 +330,9 @@ pub mod HTLC {
 
             let block_info = get_block_info().unbox();
 
-            self.orders.write(order_id, Order { fulfilled_at: block_info.block_number.into(), ..order });
+            self
+                .orders
+                .write(order_id, Order { fulfilled_at: block_info.block_number.into(), ..order });
 
             self.token.read().transfer(order.initiator, order.amount);
 
@@ -296,14 +352,16 @@ pub mod HTLC {
         fn instant_refund(ref self: ContractState, order_id: felt252, signature: Array<felt252>) {
             let order = self.orders.read(order_id);
             assert!(order.redeemer.is_non_zero(), "HTLC: order not initiated");
-            assert!(!order.fulfilled_at.is_zero(), "HTLC: order fulfilled");
+            assert!(order.fulfilled_at.is_zero(), "HTLC: order fulfilled");
 
             let caller = get_caller_address();
-            
+
             // If caller is not the redeemer, require a valid signature
             if caller != order.redeemer {
                 let verifying_contract = get_contract_address();
-                let refund = instantRefund { orderID: order_id, verifyingContract: verifying_contract };
+                let refund = instantRefund {
+                    orderID: order_id, verifyingContract: verifying_contract,
+                };
                 let chain_id = self.chain_id.read();
                 let message_hash = refund.get_message_hash(chain_id, order.redeemer);
 
@@ -314,7 +372,9 @@ pub mod HTLC {
             }
 
             let block_info = get_block_info().unbox();
-            self.orders.write(order_id, Order { fulfilled_at: block_info.block_number.into(), ..order });
+            self
+                .orders
+                .write(order_id, Order { fulfilled_at: block_info.block_number.into(), ..order });
 
             self.token.read().transfer(order.initiator, order.amount);
 
@@ -383,23 +443,14 @@ pub mod HTLC {
                 .transfer_from(funder_, get_contract_address(), amount_);
             assert!(transfer_result, "ERC20: Transfer failed");
 
-            self
-                .emit(
-                    Event::Initiated(
-                        Initiated {
-                            order_id,
-                            secret_hash: secret_hash_,
-                            amount: amount_,
-                        },
-                    ),
-                );
-
             order_id
         }
 
-        /// @notice  Generates a unique order ID based on chain ID, secret hash, initiator, redeemer, timelock, amount, and contract address.
+        /// @notice  Generates a unique order ID based on chain ID, secret hash, initiator,
+        /// redeemer, timelock, amount, and contract address.
         /// @dev     Uses the Poseidon hash function to ensure uniqueness and security.
-        ///          Follows the same order as Solidity: chainId, secretHash, initiator, redeemer, timelock, amount, address(this)
+        ///          Follows the same order as Solidity: chainId, secretHash, initiator, redeemer,
+        ///          timelock, amount, address(this)
         ///
         /// @param   chain_id           Chain ID where the swap is being executed.
         /// @param   secret_hash        SHA-256 hash of the secret used for redemption.
@@ -416,7 +467,9 @@ pub mod HTLC {
             timelock: u128,
             amount: u256,
         ) -> felt252 {
-            let contract_address: felt252 = get_contract_address().try_into().expect('HTLC: invalid contract address');
+            let contract_address: felt252 = get_contract_address()
+                .try_into()
+                .expect('HTLC: invalid contract address');
             let mut state = PoseidonTrait::new();
             state = state.update(chain_id);
             state = state.update_with(secret_hash);
